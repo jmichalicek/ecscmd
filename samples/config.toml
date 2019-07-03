@@ -1,7 +1,7 @@
 # This would normally be ~/.ecscmd.toml
 [taskdef.test]
 family = "testTaskDef"
-template = "samples/taskDefTemplate.json"
+template = "samples/containerDefinitions.json"
 [taskdef.test.templatevars]
 ExecutionRoleArn = "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
 ContainerName = "foo"

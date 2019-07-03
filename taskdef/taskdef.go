@@ -8,6 +8,7 @@ import (
 	"text/template"
 	"fmt"
 	"bytes"
+	"encoding/json"
 	// "log"
 )
 
@@ -34,7 +35,7 @@ type service struct {
 
 // super lazy here on what will get returned for now. Should possibly return a proper object.
 // the aws packages have structs for task defs, etc.
-func ParseTemplate(config map[string]interface{}) (string, error) {
+func ParseContainerDefTemplate(config map[string]interface{}) ([]byte, error) {
 	templateFile := config["template"].(string)
 	templateVars := config["templatevars"]
 	fmt.Printf("%v", templateVars)
@@ -42,12 +43,28 @@ func ParseTemplate(config map[string]interface{}) (string, error) {
 
 	var tpl bytes.Buffer
 	if err := t.Execute(&tpl, templateVars); err != nil {
-  	return "", err
+  	return tpl.Bytes(), err
 	}
-	result := tpl.String()
+	result := tpl.Bytes()
 	return result, nil
 }
 // end resgieter-task-def stuff
+
+func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition, error) {
+	// TODO: is this useful or should this just be what ParseContainerDefTemplate() does?
+	var cdefs []*ecs.ContainerDefinition
+	err := json.Unmarshal(containerDefs, &cdefs)
+	return cdefs, err
+}
+
+/*
+ * Takes the dict for config for a taskdefinition + a slice of *ecs.ContainerDefinition to build
+ * the ecs.TaskDefinitionInput.
+ *
+ * Possibly should be renamed - would like one function which does all of this for ease of use
+ */
+func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) {
+}
 
 func fake_func() {
 	// TODO: region as var and from settings

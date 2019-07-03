@@ -75,9 +75,17 @@ var cmdRegisterTaskDef = &cobra.Command{
 			// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
 			// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
 			// so maybe it will unmarshal to the types I need.
-			taskdef, err := taskdef.ParseTemplate(taskDefConfig)
-			fmt.Println("Taskdef: " + taskdef)
+			containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
+			fmt.Println("Taskdef: " + string(containerDefBytes))
 			fmt.Println("Err: " + fmt.Sprintf("%s", err))
+			cdef, err := taskdef.MakeContainerDefinitions(containerDefBytes)
+			fmt.Printf("Cdef: %v\n", cdef)
+			fmt.Println("Err: " + fmt.Sprintf("%s", err))
+
+			// TODO: now make the actual task def
+			// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
+			// and this.
+			taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
     },
   }
 
