@@ -85,6 +85,17 @@
   revision = "c2b33e84"
 
 [[projects]]
+  digest = "1:aed204bc0497ca927d374822f57d7ea6a188d3d0e6a17da3370290dec67ae00a"
+  name = "github.com/knadh/koanf"
+  packages = [
+    ".",
+    "maps",
+  ]
+  pruneopts = ""
+  revision = "e03696aebda20b7c552a2b24d82610b6745d1837"
+  version = "v0.4.3"
+
+[[projects]]
   digest = "1:ae39921edb7f801f7ce1b6b5484f9715a1dd2b52cb645daef095cd10fd6ee774"
   name = "github.com/magiconair/properties"
   packages = ["."]
@@ -203,8 +214,10 @@
   analyzer-version = 1
   input-imports = [
     "github.com/aws/aws-sdk-go/aws",
+    "github.com/aws/aws-sdk-go/aws/awserr",
     "github.com/aws/aws-sdk-go/aws/session",
     "github.com/aws/aws-sdk-go/service/ecs",
+    "github.com/knadh/koanf",
     "github.com/mitchellh/go-homedir",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",

@@ -21,12 +21,16 @@ import (
   "github.com/spf13/cobra"
 	"strings"
   homedir "github.com/mitchellh/go-homedir"
-  "github.com/spf13/viper"
 	"github.com/jmichalicek/ecscmd/taskdef"
+	"github.com/knadh/koanf"
+	"github.com/knadh/koanf/parsers/toml"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/env"
 )
 
 
 var cfgFile string
+var k = koanf.New(".") // TODO: just following the docs/examples for now. Not a fan of the global
 
 
 // rootCmd represents the base command when called without any subcommands
@@ -64,11 +68,13 @@ var cmdRegisterTaskDef = &cobra.Command{
     Run: func(cmd *cobra.Command, args []string) {
 			// TODO: too much going on here... or will be
       fmt.Println("Print: " + strings.Join(args, " "))
-			// fmt.Println("Config: " + fmt.Sprintf("%v", viper.AllSettings()))
 			var taskDefName = args[0]
 			var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
-			var taskDefConfig = viper.GetStringMap(configKey)
+			taskDefConfig := k.Get(configKey).(map[string]interface{})
 			fmt.Println("Config: " + fmt.Sprintf("%v", taskDefConfig))
+			// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
+			// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
+			// so maybe it will unmarshal to the types I need.
 			taskdef, err := taskdef.ParseTemplate(taskDefConfig)
 			fmt.Println("Taskdef: " + taskdef)
 			fmt.Println("Err: " + fmt.Sprintf("%s", err))
@@ -104,29 +110,13 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	// TODO: viper is forcing keys to lowercase. Might have to scrap it in favor of a different config parser
-	// https://github.com/spf13/viper/pull/635
-	viper.SetKeysCaseSensitive()
-  if cfgFile != "" {
-    // Use config file from the flag.
-    viper.SetConfigFile(cfgFile)
-  } else {
-    // Find home directory.
-    home, err := homedir.Dir()
-    if err != nil {
-      fmt.Println(err)
-      os.Exit(1)
-    }
-
-    // Search config in home directory with name ".ecscmd" (without extension).
-    viper.AddConfigPath(home)
-    viper.SetConfigName(".ecscmd")
-  }
-
-  viper.AutomaticEnv() // read in environment variables that match
-
-  // If a config file is found, read it in.
-  if err := viper.ReadInConfig(); err == nil {
-    fmt.Println("Using config file:", viper.ConfigFileUsed())
-  }
+	home, err := homedir.Dir()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	// TODO: look in current dir first, then in home
+	// TODO: other config file formats, custom config file path from command line
+	k.Load(file.Provider(fmt.Sprintf("%s/.ecscmd.toml", home)), toml.Parser())
+	k.Load(env.Provider("", ".", nil), nil)
 }
