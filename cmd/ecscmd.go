@@ -19,9 +19,10 @@ import (
   "fmt"
   "os"
   "github.com/spf13/cobra"
-
+	"strings"
   homedir "github.com/mitchellh/go-homedir"
   "github.com/spf13/viper"
+	"github.com/jmichalicek/ecscmd/taskdef"
 )
 
 
@@ -42,6 +43,37 @@ var rootCmd = &cobra.Command{
   // has an action associated with it:
   //	Run: func(cmd *cobra.Command, args []string) { },
 }
+
+// This probably belongs in its own file?
+
+// task def example in config file will be like: maybe?
+// [taskDefinitions]
+//   [taskDefinitions.name1]
+//     stuff here... container def variables
+//   [taskDefinitions.name2]
+//     stuff here
+// [taskDefinition]
+// And then can do ecscmd register-task-def name1 --containerDefs='path/to/template' [container def template vars here somehow?] --other-properties, etc.
+// with defaults coming from config.  But might also just use list of [taskDefinition] blocks
+var cmdRegisterTaskDef = &cobra.Command{
+    Use:   "register-task-def taskDefName",
+    Short: "Register an ECS task definition",
+    Long: `Register a new task definition or update an existing task definition.
+    A taskDefinition section should exist in the config file`,
+    Args: cobra.MinimumNArgs(1),
+    Run: func(cmd *cobra.Command, args []string) {
+			// TODO: too much going on here... or will be
+      fmt.Println("Print: " + strings.Join(args, " "))
+			// fmt.Println("Config: " + fmt.Sprintf("%v", viper.AllSettings()))
+			var taskDefName = args[0]
+			var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
+			var taskDefConfig = viper.GetStringMap(configKey)
+			fmt.Println("Config: " + fmt.Sprintf("%v", taskDefConfig))
+			taskdef, err := taskdef.ParseTemplate(taskDefConfig)
+			fmt.Println("Taskdef: " + taskdef)
+			fmt.Println("Err: " + fmt.Sprintf("%s", err))
+    },
+  }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -65,11 +97,16 @@ func init() {
   // Cobra also supports local flags, which will only run
   // when this action is called directly.
   rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	rootCmd.AddCommand(cmdRegisterTaskDef)
 }
 
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	// TODO: viper is forcing keys to lowercase. Might have to scrap it in favor of a different config parser
+	// https://github.com/spf13/viper/pull/635
+	viper.SetKeysCaseSensitive()
   if cfgFile != "" {
     // Use config file from the flag.
     viper.SetConfigFile(cfgFile)
@@ -93,25 +130,3 @@ func initConfig() {
     fmt.Println("Using config file:", viper.ConfigFileUsed())
   }
 }
-
-// This probably belongs in its own file?
-
-// task def example in config file will be like: maybe?
-// [taskDefinitions]
-//   [taskDefinitions.name1]
-//     stuff here... container def variables
-//   [taskDefinitions.name2]
-//     stuff here
-[taskDefinition]
-// And then can do ecscmd register-task-def name1 --containerDefs='path/to/template' [container def template vars here somehow?] --other-properties, etc.
-// with defaults coming from config.  But might also just use list of [taskDefinition] blocks
-var cmdRegisterTaskDef = &cobra.Command{
-    Use:   "register-task-def taskDefName",
-    Short: "Register an ECS task definition",
-    Long: `Register a new task definition or update an existing task definition.
-    A taskDefinition section should exist in the config file`,
-    Args: cobra.MinimumNArgs(1),
-    Run: func(cmd *cobra.Command, args []string) {
-      fmt.Println("Print: " + strings.Join(args, " "))
-    },
-  }
