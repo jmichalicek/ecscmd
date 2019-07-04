@@ -1,5 +1,7 @@
 package taskdef
 
+// might just make this package "tasks" and include running tasks in here, etc.
+
 import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -62,8 +64,37 @@ func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition,
  * the ecs.TaskDefinitionInput.
  *
  * Possibly should be renamed - would like one function which does all of this for ease of use
+ * TODO: make config more concrete?
  */
-func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) {
+func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) (*ecs.RegisterTaskDefinitionInput, error){
+	family := config["family"].(string)
+
+	input := ecs.RegisterTaskDefinitionInput{ContainerDefinitions: containerDefs, Family: &family}
+	return &input, input.Validate()
+}
+
+func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) {
+
+	// sess := session.Must(
+	// 	session.NewSessionWithOptions(
+	// 		session.Options{SharedConfigState: session.SharedConfigEnable,
+	// 	})
+	// )
+	//
+	// sess, err := session.NewSession(&aws.Config{
+  //   Region:      aws.String("us-east-1"),
+  //   Credentials: credentials.NewSharedCredentials("", "test-account"),
+	// })
+	//
+	// sess, err := session.NewSession(&aws.Config{
+	// 	Region: aws.String("us-east-1")},
+	// )
+
+	// Create EC2 service client
+	// svc := ecs.New(sess)
+	result, err := client.RegisterTaskDefinition(input)
+	fmt.Printf("%#v", result)
+	fmt.Printf("%s", err)
 }
 
 func fake_func() {
