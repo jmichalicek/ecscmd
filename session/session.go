@@ -2,6 +2,8 @@ package session
 
 import (
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/aws"
+	// "fmt"
 )
 
 // Get an AWS session. This may turn out to be unncessary, but there are a lot of things which "might"
@@ -16,6 +18,10 @@ func NewAwsSession(config map[string]interface{}) (*session.Session, error) {
 		SharedConfigState: session.SharedConfigEnable,
 		// Profile: "foo"
 		// Config: aws.Config{Region: aws.String("us-east-1")},
+	}
+	if profile, ok := config["profile"]; ok {
+		p := aws.String(profile.(string))
+		options.Profile = *p
 	}
 	return session.NewSessionWithOptions(options)
 

@@ -27,8 +27,15 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"os"
-	"strings"
+	// "strings"
+	"path"
 )
+
+// type rootConfig struct {
+// 	ConfigFile string
+// 	AwsProfile *string
+// 	AwsRegion *string
+// }
 
 var cfgFile string
 var k = koanf.New(".") // TODO: just following the docs/examples for now. Not a fan of the global
@@ -61,13 +68,11 @@ var cmdRegisterTaskDef = &cobra.Command{
     A taskDefinition section should exist in the config file`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: too much going on here... or will be
-		fmt.Println("Print: " + strings.Join(args, " "))
+		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		var taskDefName = args[0]
 		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
-		// fmt.Printf("%v", k.All())
 		taskDefConfig := k.Get(configKey).(map[string]interface{})
-		fmt.Println("Config: " + fmt.Sprintf("%v", taskDefConfig))
+		// fmt.Printf("%v", k.All())
 		// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
 		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
 		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
@@ -75,15 +80,23 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
-		fmt.Printf("TaskDefInput: %s\n", i.GoString())
-		fmt.Println("Err: " + fmt.Sprintf("%s", err))
-
+		fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
+		if err != nil {
+			fmt.Println("Err: " + fmt.Sprintf("%s", err))
+			return
+		}
 		session, err := session.NewAwsSession(taskDefConfig)
 		// check error!
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
 		client := ecs.New(session)
-		taskdef.RegisterTaskDefinition(i, client)
+
+		result, err := taskdef.RegisterTaskDefinition(i, client)
+		if err != nil {
+			fmt.Printf("%s", err)
+		}
+
+		fmt.Printf("AWS Response:\n%v\n", result)
 	},
 }
 
@@ -103,7 +116,18 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ecscmd.yaml)")
+	// TODO: feel like this has to happen before initConfig() is called to be useful, but it is done in thi sorder
+	// in the cobra examples...
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
+	if len(cfgFile) == 0 {
+		home, err := homedir.Dir()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		cfgFile = path.Join(home, ".ecscmd.toml")
+	}
+	// rootCmd.PersistentFlags().StringVar(rconf.AwsProfile, "profile", "", "profile to use from ~/.aws/config and ~/.aws/credentials")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -114,6 +138,7 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	// This might be built into golang 1.12 now as
 	home, err := homedir.Dir()
 	if err != nil {
 		fmt.Println(err)
@@ -121,6 +146,8 @@ func initConfig() {
 	}
 	// TODO: look in current dir first, then in home
 	// TODO: other config file formats, custom config file path from command line
+	// TODO: pretty sure this is not using the `--config` flag currently.
+	// but try just using *cfgFile now
 	k.Load(file.Provider(fmt.Sprintf("%s/.ecscmd.toml", home)), toml.Parser())
 	k.Load(env.Provider("", ".", nil), nil)
 }

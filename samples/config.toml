@@ -1,12 +1,29 @@
 # This would normally be ~/.ecscmd.toml
-[taskdef.test]
+# If creating a new task, we need to set more values. They can stay set or be removed
+[taskdef.newTask]
+profile = "my_aws_profile"
 family = "testTaskDef"
+requiresCompatibilities = ["FARGATE"]
+cpu = "256"
+memory = "512"
 template = "samples/containerDefinitions.json"
-[taskdef.test.templatevars]
-ExecutionRoleArn = "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
+executionRoleArn = "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
+[taskdef.newTask.templatevars]
 ContainerName = "foo"
 Image = "mydockerimage"
 DjangoSettingsModule = "myapp.settings.production"
 Command = "/run_my_app.sh"
+
+# if updating an existing task, fewer options need to be set. AWS will default them to
+# that of the previous version of the task definition
+[taskdef.existingTask]
+family = "testTaskDef"
+template = "samples/containerDefinitions.json"
+[taskdef.existingTask.templatevars]
+ContainerName = "foo"
+Image = "mydockerimage"
+DjangoSettingsModule = "myapp.settings.production"
+Command = "/run_my_app.sh"
+
 [service.sample]
 name = "A-Service"

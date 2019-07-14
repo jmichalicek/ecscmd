@@ -4,34 +4,18 @@ package taskdef
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
+	// "github.com/aws/aws-sdk-go/aws/awserr"
+	// "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"text/template"
-	"fmt"
+	// "fmt"
 	"bytes"
 	"encoding/json"
 	// "log"
 )
 
-// TODO: not so sure I will need these. I can probably just
-// use the structs from the aws sdk, but may need them for reading in
-// the toml config
-type containerDefinition struct {
-	image string
-}
-
-type taskDefinition struct {
-	name string  // name from toml config
-	family string // may not need this as aws sdk will have a struct with it.
-	containerDefinitions []containerDefinition
-	// or containerDefTemplate string ??
-}
-
-type service struct {
-	taskDefinition string // really just the arn, etc.
-	clusterId string
-}
+const fargate = "FARGATE"
+const ec2 = "EC2"
 
 // register-task-def stuff
 
@@ -40,7 +24,6 @@ type service struct {
 func ParseContainerDefTemplate(config map[string]interface{}) ([]byte, error) {
 	templateFile := config["template"].(string)
 	templateVars := config["templatevars"]
-	fmt.Printf("%v", templateVars)
 	t := template.Must(template.ParseFiles(templateFile))
 
 	var tpl bytes.Buffer
@@ -68,68 +51,52 @@ func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition,
  */
 func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) (*ecs.RegisterTaskDefinitionInput, error){
 	family := config["family"].(string)
-
 	input := ecs.RegisterTaskDefinitionInput{ContainerDefinitions: containerDefs, Family: &family}
+
+	if compats, ok := config["requiresCompatibilities"]; ok {
+		cl := compats.([]interface{})
+		requiredCompats := make([]*string, len(cl))
+		for i := range cl {
+			v := compats.([]interface{})[i].(string)
+		  requiredCompats[i] = &v
+		}
+		input.RequiresCompatibilities = requiredCompats
+	}
+
+	if val, ok := config["cpu"]; ok {
+		input.Cpu = aws.String(val.(string))
+	}
+
+	if val, ok := config["memory"]; ok {
+		input.Memory = aws.String(val.(string))
+	}
+
+	if len(input.RequiresCompatibilities) == 1 && fargate == *input.RequiresCompatibilities[0] {
+		input.NetworkMode = aws.String("awsvpc")
+	} else {
+		if val, ok := config["networkMode"]; ok {
+			input.NetworkMode = aws.String(val.(string))
+		}
+	}
+
+	if val, ok := config["executionRoleArn"]; ok {
+		// required for Fargate
+		input.ExecutionRoleArn = aws.String(val.(string))
+	}
+
+
+	// fmt.Printf("\n\nINPUT: %v\n\n", input)
 	return &input, input.Validate()
 }
 
-func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) {
+func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
+	// TODO: do I even need this function? it's not actually doing anything.
+	// Perhaps it should implement the full workflow which currently is in the anonymous func in ecscmd.go
 
-	// sess := session.Must(
-	// 	session.NewSessionWithOptions(
-	// 		session.Options{SharedConfigState: session.SharedConfigEnable,
-	// 	})
-	// )
-	//
-	// sess, err := session.NewSession(&aws.Config{
-  //   Region:      aws.String("us-east-1"),
-  //   Credentials: credentials.NewSharedCredentials("", "test-account"),
-	// })
-	//
-	// sess, err := session.NewSession(&aws.Config{
-	// 	Region: aws.String("us-east-1")},
-	// )
-
-	// Create EC2 service client
-	// svc := ecs.New(sess)
-	result, err := client.RegisterTaskDefinition(input)
-	fmt.Printf("%#v", result)
-	fmt.Printf("%s", err)
-}
-
-func fake_func() {
-	// TODO: region as var and from settings
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1")},
-	)
-
-	// Create EC2 service client
-	svc := ecs.New(sess)
-
-	input := &ecs.DescribeTaskDefinitionInput{
-		TaskDefinition: aws.String("hello_world:8"),
-	}
-
-	result, err := svc.DescribeTaskDefinition(input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case ecs.ErrCodeServerException:
-				fmt.Println(ecs.ErrCodeServerException, aerr.Error())
-			case ecs.ErrCodeClientException:
-				fmt.Println(ecs.ErrCodeClientException, aerr.Error())
-			case ecs.ErrCodeInvalidParameterException:
-				fmt.Println(ecs.ErrCodeInvalidParameterException, aerr.Error())
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
-		return
-	}
-
-	fmt.Println(result)
+	return client.RegisterTaskDefinition(input)
+	// fmt.Printf("%T", result)
+	// fmt.Printf("%v\n", result)
+	// if err != nil {
+	// 	fmt.Printf("%s", err)
+	// }
 }
