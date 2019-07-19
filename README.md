@@ -21,6 +21,8 @@ https://github.com/fabfuel/ecs-deploy was the original inspiration for this, I b
 
 ## TODO:
 * Try to load config from current directory first THEN home to allow for project specific configs.
+* Flatten configs/names. Instead of `taskDefinition.name` and `service.name`, just `name` which could be `service-name` or `account-service-name`
+  or `taskdef-foo`, etc. however users need which will simplify and flatten configs.
 * Consider loading template vars at top of namespace - right now they have an ugly nested `taskDefinition.name.templateVars.VarName` for the full environment variable. Gross. Perhaps the in config nested ones can override a top level defaults.
 * Namespace environment vars used for template vars so no accidents happen?  `ECSCMD_DjangoSettingsModule`? If so, keep literal or do some automatic conversion from camel cased to upper snake case?
 * run tasks

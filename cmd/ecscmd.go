@@ -20,6 +20,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/jmichalicek/ecscmd/session"
 	"github.com/jmichalicek/ecscmd/taskdef"
+	"github.com/jmichalicek/ecscmd/service"
+
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/env"
@@ -80,7 +82,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
-		fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
+		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
 		if err != nil {
 			fmt.Println("Err: " + fmt.Sprintf("%s", err))
 			return
@@ -96,7 +98,47 @@ var cmdRegisterTaskDef = &cobra.Command{
 			fmt.Printf("%s", err)
 		}
 
-		fmt.Printf("AWS Response:\n%v\n", result)
+		fmt.Printf("\n\nAWS Response:\n%v\n", result)
+	},
+}
+
+// should this instaed be `ecscmd service udpate` and `ecscmd service create`, etc?
+var cmdUpdateService = &cobra.Command{
+	Use:   "update-service <serviceName>",
+	Short: "Update an existing ECS Service",
+	Long: `Update an existing ECS Service`,
+	Args: cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
+		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
+		var configName = args[0]
+		var configKey = fmt.Sprintf("service.%s", configName)
+		serviceConfig := k.Get(configKey).(map[string]interface{})
+		// fmt.Printf("%v", k.All())
+		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
+		// and this.
+		i, err := service.NewFargateUpdateServiceInput(serviceConfig)
+		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
+		if err != nil {
+			fmt.Println("Err: " + fmt.Sprintf("%s", err))
+			return
+		}
+		fmt.Printf("%v", i)
+
+		session, err := session.NewAwsSession(serviceConfig)
+		// check error!
+		// TODO: look at source for how this is implemented to handle both this OR with extra config
+		// both on ecs.New()
+		client := ecs.New(session)
+
+		// result, err := taskdef.RegisterTaskDefinition(i, client)
+		// TODO: updateservice call
+		result, err := client.UpdateService(i)
+		if err != nil {
+			fmt.Printf("%s", err)
+		}
+
+		fmt.Printf("\n\nAWS Response:\n%v\n", result)
 	},
 }
 
@@ -131,9 +173,15 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+	// TODO? Make deeper subcommands like below?
+	// ecscmd taskdef register
+	// ecscmd service update
 	rootCmd.AddCommand(cmdRegisterTaskDef)
+	rootCmd.AddCommand(cmdUpdateService)
+
+	cmdUpdateService.Flags().StringP("taskdef", "t", "", "Task definition arn for the service to use.")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -148,6 +196,39 @@ func initConfig() {
 	// TODO: other config file formats, custom config file path from command line
 	// TODO: pretty sure this is not using the `--config` flag currently.
 	// but try just using *cfgFile now
-	k.Load(file.Provider(fmt.Sprintf("%s/.ecscmd.toml", home)), toml.Parser())
+	if cfgFile != "" {
+		if canUseFile(cfgFile) {
+			k.Load(file.Provider(cfgFile), toml.Parser())
+		} else {
+			fmt.Printf("Cannot load specified config file: %s", cfgFile)  // TODO: use stderr?
+			os.Exit(1)
+		}
+	} else {
+		// TODO: which should take precedence? ~/.ecscmd.toml FIRST to load defaults and then override project specific
+		// or local dir first (as is now) to provide general, in code repo default, and let user override with ~/.ecscmd.toml
+		// TODO: load other config file formats... .yml, etc.
+		if canUseFile("./.ecscmd.toml") {
+			k.Load(file.Provider("./.ecscmd.toml"), toml.Parser())
+		}
+
+		defaultConfig := fmt.Sprintf("%s/.ecscmd.toml", home)
+		if canUseFile(defaultConfig) {
+			k.Load(file.Provider(defaultConfig), toml.Parser())
+		}
+
+	}
+
 	k.Load(env.Provider("", ".", nil), nil)
+	// TODO: override further via command line
+}
+
+// TODO: this should live somewhere more reusable
+// TODO: does this expand ~ or $HOME?
+func canUseFile(filename string) bool {
+    info, err := os.Stat(filename)
+    if os.IsNotExist(err) {
+        return false
+    }
+		// there could be other errors wher the file exists but is not usable still for some reason.
+    return err == nil && !info.IsDir()
 }
