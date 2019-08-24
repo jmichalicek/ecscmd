@@ -18,9 +18,9 @@ package cmd
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/jmichalicek/ecscmd/service"
 	"github.com/jmichalicek/ecscmd/session"
 	"github.com/jmichalicek/ecscmd/taskdef"
-	"github.com/jmichalicek/ecscmd/service"
 
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/toml"
@@ -30,8 +30,9 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	// "strings"
-	"path"
+	"github.com/hashicorp/logutils"
 	"log"
+	"path"
 )
 
 // type rootConfig struct {
@@ -44,6 +45,7 @@ var cfgFile string
 var k = koanf.New(".") // TODO: just following the docs/examples for now. Not a fan of the global
 
 // variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
+var logLevel string
 var serviceTaskDef string
 
 // rootCmd represents the base command when called without any subcommands
@@ -60,7 +62,6 @@ var rootCmd = &cobra.Command{
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
 }
-
 
 // TODO: may go back to full taskdef as json template. awscli allows for using a json file so
 // hopefully I can just unmarshal the whole thing to RegistTaskDefinitionInput, maybe.
@@ -88,7 +89,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
 		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
 		if err != nil {
-			log.Fatalf("Err: %s", err)
+			log.Fatalf("[ERROR] %s", err)
 		}
 		session, err := session.NewAwsSession(taskDefConfig)
 		// check error!
@@ -98,9 +99,11 @@ var cmdRegisterTaskDef = &cobra.Command{
 
 		result, err := taskdef.RegisterTaskDefinition(i, client)
 		if err != nil {
-			log.Fatalf("Err: %s", err)
+			log.Fatalf("[ERROR] %s", err)
 		}
 
+		// not sure how I feel about using log vs fmt here. If actually going into a log, the timestamp is great
+		// but for regular useful user output...meh.
 		log.Printf("\n\nAWS Response:\n%v\n", result)
 	},
 }
@@ -109,9 +112,10 @@ var cmdRegisterTaskDef = &cobra.Command{
 var cmdUpdateService = &cobra.Command{
 	Use:   "update-service <serviceName>",
 	Short: "Update an existing ECS Service",
-	Long: `Update an existing ECS Service`,
-	Args: cobra.MinimumNArgs(1),
+	Long:  `Update an existing ECS Service`,
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Print("DOING THINGS")
 		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
 		var configName = args[0]
@@ -130,7 +134,7 @@ var cmdUpdateService = &cobra.Command{
 		i, err := service.NewFargateUpdateServiceInput(serviceConfig)
 		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
 		if err != nil {
-			log.Fatalf("Err: %s", err)
+			log.Fatalf("[ERROR] %s", err)
 		}
 		log.Printf("%v", i)
 
@@ -144,16 +148,23 @@ var cmdUpdateService = &cobra.Command{
 		// TODO: updateservice call
 		result, err := client.UpdateService(i)
 		if err != nil {
-			log.Fatalf("Err: %s", err)
+			log.Fatalf("[ERROR] %s", err)
 		}
 
-		log.Printf("\n\nAWS Response:\n%v\n", result)
+		log.Printf("[INFO] AWS Response:\n%v\n", result)
 	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	filter := &logutils.LevelFilter{
+		Levels: []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR"},
+		MinLevel: logutils.LogLevel(logLevel),
+		Writer: os.Stderr,
+	}
+	log.SetOutput(filter)
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -162,7 +173,6 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
@@ -170,6 +180,10 @@ func init() {
 	// TODO: feel like this has to happen before initConfig() is called to be useful, but it is done in thi sorder
 	// in the cobra examples...
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
+	// TODO: this is being completely ignored from the command line.
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "Minimum level for log messages. Default is INFO.")
+
+
 	if len(cfgFile) == 0 {
 		home, err := homedir.Dir()
 		if err != nil {
@@ -211,7 +225,7 @@ func initConfig() {
 		if canUseFile(cfgFile) {
 			k.Load(file.Provider(cfgFile), toml.Parser())
 		} else {
-			log.Fatalf("Cannot load specified config file: %s", cfgFile)
+			log.Fatalf("[ERROR] Cannot load specified config file: %s", cfgFile)
 			os.Exit(1)
 		}
 	} else {
@@ -236,10 +250,10 @@ func initConfig() {
 // TODO: this should live somewhere more reusable
 // TODO: does this expand ~ or $HOME?
 func canUseFile(filename string) bool {
-    info, err := os.Stat(filename)
-    if os.IsNotExist(err) {
-        return false
-    }
-		// there could be other errors wher the file exists but is not usable still for some reason.
-    return err == nil && !info.IsDir()
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	// there could be other errors wher the file exists but is not usable still for some reason.
+	return err == nil && !info.IsDir()
 }
