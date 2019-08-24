@@ -31,6 +31,7 @@ import (
 	"os"
 	// "strings"
 	"path"
+	"log"
 )
 
 // type rootConfig struct {
@@ -41,6 +42,9 @@ import (
 
 var cfgFile string
 var k = koanf.New(".") // TODO: just following the docs/examples for now. Not a fan of the global
+
+// variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
+var serviceTaskDef string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -84,8 +88,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
 		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
 		if err != nil {
-			fmt.Println("Err: " + fmt.Sprintf("%s", err))
-			return
+			log.Fatalf("Err: %s", err)
 		}
 		session, err := session.NewAwsSession(taskDefConfig)
 		// check error!
@@ -95,10 +98,10 @@ var cmdRegisterTaskDef = &cobra.Command{
 
 		result, err := taskdef.RegisterTaskDefinition(i, client)
 		if err != nil {
-			fmt.Printf("%s", err)
+			log.Fatalf("Err: %s", err)
 		}
 
-		fmt.Printf("\n\nAWS Response:\n%v\n", result)
+		log.Printf("\n\nAWS Response:\n%v\n", result)
 	},
 }
 
@@ -113,17 +116,23 @@ var cmdUpdateService = &cobra.Command{
 		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
 		var configName = args[0]
 		var configKey = fmt.Sprintf("service.%s", configName)
-		serviceConfig := k.Get(configKey).(map[string]interface{})
-		// fmt.Printf("%v", k.All())
+		k2 := k.Cut(configKey)
+		serviceConfig := k2.Raw()
+
+		// TODO: again, super clunky and inelegant... there must be a better way, but mixing Cobra for its nested commands
+		// with koanf for its better parsing of everything else seems to leave few options here and they all kind of suck.
+		if &serviceTaskDef != nil {
+			serviceConfig["taskDefinition"] = serviceTaskDef
+		}
+
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
 		i, err := service.NewFargateUpdateServiceInput(serviceConfig)
 		// fmt.Printf("\nTaskDefInput: %s\n\n", i.GoString())
 		if err != nil {
-			fmt.Println("Err: " + fmt.Sprintf("%s", err))
-			return
+			log.Fatalf("Err: %s", err)
 		}
-		fmt.Printf("%v", i)
+		log.Printf("%v", i)
 
 		session, err := session.NewAwsSession(serviceConfig)
 		// check error!
@@ -135,10 +144,10 @@ var cmdUpdateService = &cobra.Command{
 		// TODO: updateservice call
 		result, err := client.UpdateService(i)
 		if err != nil {
-			fmt.Printf("%s", err)
+			log.Fatalf("Err: %s", err)
 		}
 
-		fmt.Printf("\n\nAWS Response:\n%v\n", result)
+		log.Printf("\n\nAWS Response:\n%v\n", result)
 	},
 }
 
@@ -181,7 +190,9 @@ func init() {
 	rootCmd.AddCommand(cmdRegisterTaskDef)
 	rootCmd.AddCommand(cmdUpdateService)
 
-	cmdUpdateService.Flags().StringP("taskdef", "t", "", "Task definition arn for the service to use.")
+	// variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
+	// the mixing of cobra/viper/koanf is gross, too.
+	cmdUpdateService.Flags().StringVarP(&serviceTaskDef, "taskdef", "t", "", "Task definition arn for the service to use.")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -200,7 +211,7 @@ func initConfig() {
 		if canUseFile(cfgFile) {
 			k.Load(file.Provider(cfgFile), toml.Parser())
 		} else {
-			fmt.Printf("Cannot load specified config file: %s", cfgFile)  // TODO: use stderr?
+			log.Fatalf("Cannot load specified config file: %s", cfgFile)
 			os.Exit(1)
 		}
 	} else {
