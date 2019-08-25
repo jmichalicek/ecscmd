@@ -1,7 +1,7 @@
 # This would normally be ~/.ecscmd.toml
 # If creating a new task, we need to set more values. They can stay set or be removed
 [taskdef.newTask]
-profile = "my_aws_profile"
+profile = "my_aws_profile"  # also needs to be command line option
 family = "testTaskDef"
 requiresCompatibilities = ["FARGATE"]
 cpu = "256"
@@ -9,10 +9,9 @@ memory = "512"
 template = "samples/containerDefinitions.json"
 executionRoleArn = "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
 [taskdef.newTask.templatevars]
-ContainerName = "foo"
-Image = "mydockerimage"
-DjangoSettingsModule = "myapp.settings.production"
-Command = "/run_my_app.sh"
+ContainerName = "nginx"
+Image = "nginx:latest"
+AwsLogsGroup = "/test"
 
 # if updating an existing task, fewer options need to be set. AWS will default them to
 # that of the previous version of the task definition
@@ -20,10 +19,19 @@ Command = "/run_my_app.sh"
 family = "testTaskDef"
 template = "samples/containerDefinitions.json"
 [taskdef.existingTask.templatevars]
-ContainerName = "foo"
-Image = "mydockerimage"
-DjangoSettingsModule = "myapp.settings.production"
-Command = "/run_my_app.sh"
+ContainerName = "nginx"
+Image = "nginx:latest"
+AwsLogsGroup = "/test"
 
 [service.sample]
-name = "A-Service"
+profile = "my_aws_profile"
+# Keeping to minimum required for now
+name = "testFargateService"
+cluster = "testEcsCluster"
+taskDefinition = "testTaskDef" # will also be a command line option - that is potentially more frequently desired
+# make these a NetworkConfiguration and/or AwsVpcConfiguration subgroup to match the code aws sdk structure?
+# or keep it flat?
+assignPublicIp = "ENABLED" # Default - disabled. Normally would use load balancer and no public ip here. May need to pull down current configuration, then just updated values which are specified.
+securityGroups = ["sg-mysecuritygroup1", "sg-mysecuritygroup2"]  # default is vpc default. test what happens if service has sg's and then I update without specifying this
+subnets = ["subnet-mysubnet1"]  # required
+# TODO: add other configs
