@@ -17,11 +17,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/jmichalicek/ecscmd/service"
-	"github.com/jmichalicek/ecscmd/session"
-	"github.com/jmichalicek/ecscmd/taskdef"
-
 	"github.com/hashicorp/logutils"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/toml"
@@ -41,6 +36,7 @@ import (
 // 	AwsRegion *string
 // }
 
+// mauy make these public like my initial example above
 type rootConfig struct {
 	configFile string
 	logLevel   string
@@ -49,9 +45,6 @@ type rootConfig struct {
 var baseConfig rootConfig
 
 var k = koanf.New(".") // TODO: just following the docs/examples for now. Not a fan of the global
-
-// variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
-var serviceTaskDef string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -66,102 +59,6 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
-}
-
-// TODO: may go back to full taskdef as json template. awscli allows for using a json file so
-// hopefully I can just unmarshal the whole thing to RegistTaskDefinitionInput, maybe.
-// which could simplify the config structure to being almost all template vars + a few aws session details like region, profile, etc
-// need to see how this works as is with creating a new taskdef and as far as updating existing taskdef - want to be able
-// to easily just update the bare minimum which most of the time will just be container defs to update an image
-var cmdRegisterTaskDef = &cobra.Command{
-	Use:   "register-task-def taskDefName",
-	Short: "Register an ECS task definition",
-	Long: `Register a new task definition or update an existing task definition.
-    A taskDefinition section should exist in the config file`,
-	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
-		var taskDefName = args[0]
-		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
-		// taskDefConfig := k.Get(configKey).(map[string]interface{})
-		taskDefConfig := k.Cut(configKey).Raw()
-		// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
-		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
-		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
-		cdef, err := taskdef.MakeContainerDefinitions(containerDefBytes)
-		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
-		// and this.
-		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-
-		session, err := session.NewAwsSession(taskDefConfig)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-		// TODO: look at source for how this is implemented to handle both this OR with extra config
-		// both on ecs.New()
-		client := ecs.New(session)
-
-		result, err := taskdef.RegisterTaskDefinition(i, client)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-
-		// not sure how I feel about using log vs fmt here. If actually going into a log, the timestamp is great
-		// but for regular useful user output...meh. May just want to do both stdout and log
-		log.Printf("[INFO] AWS Response:\n%v\n", result)
-	},
-}
-
-// should this instaed be `ecscmd service udpate` and `ecscmd service create`, etc?
-var cmdUpdateService = &cobra.Command{
-	Use:   "update-service <serviceName>",
-	Short: "Update an existing ECS Service",
-	Long:  `Update an existing ECS Service`,
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
-		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
-		var configName = args[0]
-		var configKey = fmt.Sprintf("service.%s", configName)
-		// k2 := k.Cut(configKey)
-		// serviceConfig := k2.Raw()
-		serviceConfig := k.Cut(configKey).Raw()
-
-		// TODO: again, super clunky and inelegant... there must be a better way, but mixing Cobra for its nested commands
-		// with koanf for its better parsing of everything else seems to leave few options here and they all kind of suck.
-		// taking command line options here and using them to override settings from configs
-		if &serviceTaskDef != nil {
-			serviceConfig["taskDefinition"] = serviceTaskDef
-		}
-
-		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
-		// and this.
-		i, err := service.NewFargateUpdateServiceInput(serviceConfig)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-		log.Printf("[DEBUG] %v", i)
-
-		session, err := session.NewAwsSession(serviceConfig)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-		// TODO: look at source for how this is implemented to handle both this OR with extra config
-		// both on ecs.New()
-		client := ecs.New(session)
-
-		// result, err := taskdef.RegisterTaskDefinition(i, client)
-		// TODO: updateservice call
-		result, err := client.UpdateService(i)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
-		}
-
-		log.Printf("[INFO] AWS Response:\n%v\n", result)
-	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -181,23 +78,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
 	rootCmd.PersistentFlags().StringVar(&baseConfig.logLevel, "log-level", "INFO", "Minimum level for log messages. Default is INFO.")
 	// rootCmd.PersistentFlags().StringVar(rconf.AwsProfile, "profile", "", "profile to use from ~/.aws/config and ~/.aws/credentials")
-
-	// TODO? Make deeper subcommands like below?
-	// ecscmd taskdef register
-	// ecscmd service update
-	rootCmd.AddCommand(cmdRegisterTaskDef)
-	rootCmd.AddCommand(cmdUpdateService)
-
-	// variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
-	// the mixing of cobra/viper/koanf is gross, too.
-	cmdUpdateService.Flags().StringVarP(&serviceTaskDef, "taskdef", "t", "", "Task definition arn for the service to use.")
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	// This is when cobra has initialized and so logLevel has been properly set
-	filter := &
-logutils.LevelFilter{
+	filter := &logutils.LevelFilter{
 		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR"},
 		MinLevel: logutils.LogLevel(strings.ToUpper(baseConfig.logLevel)),
 		Writer:   os.Stderr,
