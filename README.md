@@ -15,8 +15,12 @@ There are already a few tools aimed at this, but none quite fit my primary requi
 * Ability run one off ecs tasks
 
 ## Usage
-ecscmd register-task-def <name> [--config=~/.ecscmd.toml]
-ecscmd update-service <name> [--task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
+The first `<name>` is the name of the section in your config file. Not all flags are yet documented here, just examples. The config section name may become optional and possibly a flag using `--some-flag` so that you can run without having a section in your config.
+```
+ecscmd task register <name> [--config=~/.ecscmd.toml]
+ecscmd service update <name> [--task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
+ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
+```
 
 ## AWS Config
 * Ensure task execution role is set up - https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html
@@ -36,3 +40,6 @@ ecscmd update-service <name> [--task-definition=mytaskdefinition:1 --force-deplo
   or `taskdef-foo`, etc. however users need which will simplify and flatten configs.
 * Consider loading template vars at top of namespace - right now they have an ugly nested `taskDefinition.name.templateVars.VarName` for the full environment variable. Gross. Perhaps the in config nested ones can override a top level defaults.
 * Namespace environment vars used for template vars so no accidents happen?  `ECSCMD_DjangoSettingsModule`? If so, keep literal or do some automatic conversion from camel cased to upper snake case?
+* Clean up code for config and command line parsing
+* Pass properly typed data instead of map[string]interface{} created from Koanf around
+* Replace Cobra with something which allows for nil/unset values from the command line to better distinguish between "not specified" and "specified as the zero value" and provide more accurate generated help.
