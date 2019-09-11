@@ -32,14 +32,21 @@ ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinitio
 * https://github.com/nathanpeck/awesome-ecs Amazon's Nathan Peck also maintains a list of ECS tools, including things similar to this which may fit your specific needs better
 
 ## TODO:
-* run tasks
+* run tasks - wait for task to complete, etc.
+* Nicer, easier to read output + json output like now, but not via logger. Possibly a couple levels of output or way to configure what values to output for easy piping into other commands
+* Pass properly typed data instead of map[string]interface{} created from Koanf around
+* Look up task def from AWS and dump the json for containers as a template
+* Consider going to just entire task def as json template?
+* `--dry-run` flag which just shows the json request which would be sent to AWS for register task def and service create/update
+* Look up current service and use as base for configs to reduce config params which must be kept in sync locally with what is desired on remote. Do same for task defs if possible.
+* Support multiple configs `--config=file1.toml --config=file2.toml` where later configs override/add to earlier parsed configs
+* Support `[default]` section in config files
 * Support CODE_DEPLOY controller and external controller/task sets for ECS services
-* more command line params supported for register task definition
+* more command line params supported for register task definition - particularly template variables
 * support passing aws auth info and aws profile on command line
 * Flatten configs/names. Instead of `taskDefinition.name` and `service.name`, just `name` which could be `service-name` or `account-service-name`
   or `taskdef-foo`, etc. however users need which will simplify and flatten configs.
-* Consider loading template vars at top of namespace - right now they have an ugly nested `taskDefinition.name.templateVars.VarName` for the full environment variable. Gross. Perhaps the in config nested ones can override a top level defaults.
+* Consider loading template vars at top of namespace - right now they have an ugly nested `taskDefinition.name.templateVars.VarName` for the full environment variable. Gross. Perhaps the in config nested ones can override a top level defaults. <- currently not likely to do this
 * Namespace environment vars used for template vars so no accidents happen?  `ECSCMD_DjangoSettingsModule`? If so, keep literal or do some automatic conversion from camel cased to upper snake case?
 * Clean up code for config and command line parsing
-* Pass properly typed data instead of map[string]interface{} created from Koanf around
 * Replace Cobra with something which allows for nil/unset values from the command line to better distinguish between "not specified" and "specified as the zero value" and provide more accurate generated help.
