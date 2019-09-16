@@ -8,6 +8,7 @@ cpu = "256"
 memory = "512"
 template = "samples/containerDefinitions.json"
 executionRoleArn = "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
+taskRoleArn = "arn:aws:iam::12345678:role/myTaskRole"
 [taskdef.newTask.templatevars]
 ContainerName = "nginx"
 Image = "nginx:latest"
