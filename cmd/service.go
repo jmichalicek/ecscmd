@@ -18,10 +18,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/jmichalicek/ecscmd/service"
 	"github.com/jmichalicek/ecscmd/session"
+	"github.com/spf13/cobra"
 	"log"
 )
 
@@ -34,13 +34,13 @@ import (
 // THIS passed to NewUpdateServiceInput but then these all need to be nillable to tell that they are unset
 // which causes extra work in setting them.
 type serviceCommandOptions struct {
-	 // updateservice specific
+	// updateservice specific
 	assignPublicIp bool // or string since real value is ENABLED or DISABLED ?
 	taskDefinition string
-	subnets []string
+	subnets        []string
 	securityGroups []string
-	cluster string
-	desiredCount int64 // aws sdk takes int64, so just use that all the way through
+	cluster        string
+	desiredCount   int64 // aws sdk takes int64, so just use that all the way through
 }
 
 type updateServiceCommandOptions struct {
@@ -51,7 +51,7 @@ type updateServiceCommandOptions struct {
 type createServiceCommandOptions struct {
 	serviceCommandOptions
 	launchType string // create service specific
-	name string // create service specific
+	name       string // create service specific
 }
 
 // TODO: this is gross and clunky. I may have to look into something other than cobra... or maybe
@@ -95,7 +95,7 @@ var createServiceCmd = &cobra.Command{
 
 		_, ok := serviceConfig["desiredCount"]
 		if !ok || cmd.Flags().Changed("desired-count") {
-    	// user set the flag as opposed to being 0 by default
+			// user set the flag as opposed to being 0 by default
 			serviceConfig["desiredCount"] = createServiceOptions.desiredCount
 		} else {
 			// this is gross. koanf is reading the integer from toml as a float64
@@ -120,12 +120,15 @@ var createServiceCmd = &cobra.Command{
 
 		// result, err := taskdef.RegisterTaskDefinition(i, client)
 		// TODO: updateservice call
-		result, err := client.CreateService(i)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+		if baseConfig.dryRun {
+			fmt.Printf("%v", i)
+		} else {
+			result, err := client.CreateService(i)
+			if err != nil {
+				log.Fatalf("[ERROR] %s", err)
+			}
+			log.Printf("[INFO] AWS Response:\n%v\n", result)
 		}
-
-		log.Printf("[INFO] AWS Response:\n%v\n", result)
 	},
 }
 
@@ -156,7 +159,7 @@ var updateServiceCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("desired-count") {
 			fmt.Println("setting desired-count!!")
-    	// user set the flag as opposed to being 0 by default
+			// user set the flag as opposed to being 0 by default
 			// TODO: replace cobra? forcing a default value makes things super unclear and clunky. The command help
 			// now shows a default of 0, but really default is to keep it as is...
 			serviceConfig["desiredCount"] = updateServiceOptions.desiredCount
@@ -185,12 +188,17 @@ var updateServiceCmd = &cobra.Command{
 
 		// result, err := taskdef.RegisterTaskDefinition(i, client)
 		// TODO: updateservice call
-		result, err := client.UpdateService(i)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+		if baseConfig.dryRun {
+			fmt.Printf("%v", i)
+		} else {
+			result, err := client.UpdateService(i)
+			if err != nil {
+				log.Fatalf("[ERROR] %s", err)
+			}
+
+			log.Printf("[INFO] AWS Response:\n%v\n", result)
 		}
 
-		log.Printf("[INFO] AWS Response:\n%v\n", result)
 	},
 }
 
@@ -199,7 +207,7 @@ func init() {
 	serviceCmd.AddCommand(createServiceCmd)
 	serviceCmd.AddCommand(updateServiceCmd)
 
-	// variables for viper to store command line flag values to... this feels incredibly clunky and inelegant.
+	// variables for viper to store command line flag values to. this feels incredibly clunky and inelegant.
 	// the mixing of cobra/viper/koanf is gross, too.
 	updateServiceCmd.Flags().StringVarP(&updateServiceOptions.taskDefinition, "task-definition", "t", "", "Task definition arn for the service to use.")
 	updateServiceCmd.Flags().BoolVar(&updateServiceOptions.forceDeployment, "force-deployment", false, "Task definition arn for the service to use.")

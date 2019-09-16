@@ -40,6 +40,7 @@ import (
 type rootConfig struct {
 	configFile string
 	logLevel   string
+	dryRun     bool
 }
 
 var baseConfig rootConfig
@@ -77,6 +78,8 @@ func init() {
 	// will be global for your application.
 	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
 	rootCmd.PersistentFlags().StringVar(&baseConfig.logLevel, "log-level", "INFO", "Minimum level for log messages. Default is INFO.")
+	// TODO: Make this per command just to provide more specific help/description for how it affects that command?
+	rootCmd.PersistentFlags().BoolVar(&baseConfig.dryRun, "dry-run", false, "Perform dry-run. Does not actually send command. Output info about what would have been performed.")
 	// rootCmd.PersistentFlags().StringVar(rconf.AwsProfile, "profile", "", "profile to use from ~/.aws/config and ~/.aws/credentials")
 }
 

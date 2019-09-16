@@ -3,9 +3,6 @@ package taskdef
 // might just make this package "tasks" and include running tasks in here, etc.
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	// "github.com/aws/aws-sdk-go/aws/awserr"
-	// "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"text/template"
 	// "fmt"
@@ -28,11 +25,12 @@ func ParseContainerDefTemplate(config map[string]interface{}) ([]byte, error) {
 
 	var tpl bytes.Buffer
 	if err := t.Execute(&tpl, templateVars); err != nil {
-  	return tpl.Bytes(), err
+		return tpl.Bytes(), err
 	}
 	result := tpl.Bytes()
 	return result, nil
 }
+
 // end resgieter-task-def stuff
 
 func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition, error) {
@@ -49,44 +47,50 @@ func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition,
  * Possibly should be renamed - would like one function which does all of this for ease of use
  * TODO: make config more concrete?
  */
-func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) (*ecs.RegisterTaskDefinitionInput, error){
+func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.ContainerDefinition) (*ecs.RegisterTaskDefinitionInput, error) {
 	family := config["family"].(string)
-	input := ecs.RegisterTaskDefinitionInput{ContainerDefinitions: containerDefs, Family: &family}
+	input := &ecs.RegisterTaskDefinitionInput{ContainerDefinitions: containerDefs, Family: &family}
 
 	if compats, ok := config["requiresCompatibilities"]; ok {
 		cl := compats.([]interface{})
 		requiredCompats := make([]*string, len(cl))
 		for i := range cl {
 			v := compats.([]interface{})[i].(string)
-		  requiredCompats[i] = &v
+			requiredCompats[i] = &v
 		}
-		input.RequiresCompatibilities = requiredCompats
+		// input.RequiresCompatibilities = requiredCompats
+		input = input.SetRequiresCompatibilities(requiredCompats)
 	}
 
 	if val, ok := config["cpu"]; ok {
-		input.Cpu = aws.String(val.(string))
+		input = input.SetCpu(val.(string))
 	}
 
 	if val, ok := config["memory"]; ok {
-		input.Memory = aws.String(val.(string))
+		input = input.SetMemory(val.(string))
 	}
 
 	if len(input.RequiresCompatibilities) == 1 && fargate == *input.RequiresCompatibilities[0] {
-		input.NetworkMode = aws.String("awsvpc")
+		// Fargate requires awsvpc network mode
+		input = input.SetNetworkMode("awsvpc")
 	} else {
 		if val, ok := config["networkMode"]; ok {
-			input.NetworkMode = aws.String(val.(string))
+			input = input.SetNetworkMode(val.(string))
 		}
 	}
 
 	if val, ok := config["executionRoleArn"]; ok {
 		// required for Fargate
-		input.ExecutionRoleArn = aws.String(val.(string))
+		input = input.SetExecutionRoleArn(val.(string))
 	}
 
+	if val, ok := config["taskRoleArn"]; ok {
+		// The taskRole so that you do not have to pass aws creds around
+		input = input.SetTaskRoleArn(val.(string))
+	}
 
 	// fmt.Printf("\n\nINPUT: %v\n\n", input)
-	return &input, input.Validate()
+	return input, input.Validate()
 }
 
 func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {

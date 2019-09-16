@@ -70,14 +70,18 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// both on ecs.New()
 		client := ecs.New(session)
 
-		result, err := taskdef.RegisterTaskDefinition(i, client)
-		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+		if baseConfig.dryRun {
+			fmt.Printf("%v", i)
+		} else {
+			result, err := taskdef.RegisterTaskDefinition(i, client)
+			if err != nil {
+				log.Fatalf("[ERROR] %s", err)
+			}
+			// not sure how I feel about using log vs fmt here. If actually going into a log, the timestamp is great
+			// but for regular useful user output...meh. May just want to do both stdout and log
+			log.Printf("[INFO] AWS Response:\n%v\n", result)
 		}
 
-		// not sure how I feel about using log vs fmt here. If actually going into a log, the timestamp is great
-		// but for regular useful user output...meh. May just want to do both stdout and log
-		log.Printf("[INFO] AWS Response:\n%v\n", result)
 	},
 }
 
