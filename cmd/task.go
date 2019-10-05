@@ -23,7 +23,26 @@ import (
 	"github.com/jmichalicek/ecscmd/taskdef"
 	"github.com/spf13/cobra"
 	"log"
+	"os"
 )
+
+// Limited subset of functionality for now
+type runTaskCommandOptions struct {
+	Cluster string `koanf:"cluster"`
+	Count int64 `koanf:"count"`
+	Group string `koanf:"group"`
+	TaskDefinition string `koanf:"family"`
+	WaitForComplete bool
+	StreamOutput bool
+	Fargate bool
+	// EnableECSManagedTags bool
+	// The name of the task group to associate with the task. The default value
+  // is the family name of the task definition (for example, family:my-family-name).
+}
+
+// TODO: this is gross and clunky. I may have to look into something other than cobra... or maybe
+// I am doing something wrong. Some of their examples were like this.
+var runTaskOptions runTaskCommandOptions = runTaskCommandOptions{Fargate: true}
 
 // serviceCmd represents the service command
 var taskCmd = &cobra.Command{
@@ -85,9 +104,64 @@ var cmdRegisterTaskDef = &cobra.Command{
 	},
 }
 
+var cmdRunTask = &cobra.Command{
+	// TODO: deal with using either the actual task def name/family/arn OR our local config name
+	Use:   "run taskDefName",
+	Short: "Run an ECS task. Currently assumes a Fargate launch type.",
+	Long: `Run an ECS task. Currently assumes a Fargate launch type.`,
+	Args: cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		// TODO: really should make the name of the config optional - may want to run a task
+		// which there is no local config for
+		var taskDefName = args[0]
+		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
+		config := k.Cut(configKey).Raw()
+		session, err := session.NewAwsSession(config)
+		if err != nil {
+			fmt.Printf("[ERROR] %s", err)
+			os.Exit(1)
+		}
+
+		// TODO: clunky and gross
+		if runTaskOptions.TaskDefinition != "" {
+			config["family"] = runTaskOptions.TaskDefinition
+		}
+		// TODO: look at source for how this is implemented to handle both this OR with extra config
+		// both on ecs.New()
+		client := ecs.New(session)
+		// TODO: look up task def, get log stream info
+		input, err := taskdef.NewRunTaskInput(config)
+		if err != nil {
+			fmt.Printf("[ERROR] %s", err)
+			os.Exit(1)
+		}
+		if baseConfig.dryRun {
+			// TODO: better output here - really should try to look up the task def on aws
+			fmt.Printf("Would run task %v\n", config)
+		} else {
+			result, err := client.RunTask(&input)
+			// result, err := taskdef.RegisterTaskDefinition(i, client)
+			if err != nil {
+				fmt.Printf("[ERROR] %s\n", err)
+			} else {
+				fmt.Printf("AWS Response:\n%v\n", result)
+				// TODO: waiter to wait for complete, stream output from cloudwatch, etc.
+			}
+		}
+
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(taskCmd)
 	taskCmd.AddCommand(cmdRegisterTaskDef)
+	taskCmd.AddCommand(cmdRunTask)
+
+	// TODO: still gross. I want these processed AFTER reading options from config, anyway.
+	cmdRunTask.Flags().StringVar(&runTaskOptions.TaskDefinition, "task-definition", "", "Task definition arn for the task to run. This could be full arn, family, or family:revision")
+	cmdRunTask.Flags().StringVar(&runTaskOptions.Cluster, "cluster", "", "Cluster to run the task on. Defaults to AWS default cluster.")
+	cmdRunTask.Flags().Int64Var(&runTaskOptions.Count, "count", 1, "How many of this task to run.")
+
 
 	// Here you will define your flags and configuration settings.
 

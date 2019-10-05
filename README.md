@@ -34,6 +34,7 @@ ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinitio
 ## TODO:
 * run tasks - wait for task to complete, etc.
 * Nicer, easier to read output + json output like now, but not via logger. Possibly a couple levels of output or way to configure what values to output for easy piping into other commands
+* Tons of internal API cleanup - decisions need to be made about how directly to just use the aws sdk vs wrap it and hide it from the outer layers (the latter would result in a lot of mirroring existing aws stuff), passing around lots of map[string]interface{} currently which could be typed structs, and moving cobra and koanf init code OUTSIDE of init() functions.
 * Pass properly typed data instead of map[string]interface{} created from Koanf around
 * Look up task def from AWS and dump the json for containers as a template
 * Consider going to just entire task def as json template?

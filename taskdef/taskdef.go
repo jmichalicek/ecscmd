@@ -5,6 +5,7 @@ package taskdef
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"text/template"
+	netconfig "github.com/jmichalicek/ecscmd/network_configuration"
 	// "fmt"
 	"bytes"
 	"encoding/json"
@@ -103,4 +104,43 @@ func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.
 	// if err != nil {
 	// 	fmt.Printf("%s", err)
 	// }
+}
+
+
+// NewRunTaskInput creates an ecs.RunTaskInput and returns it.
+func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
+	// TODO: Take a typed config struct rather than this generic options or along with it
+	// and put together the RunTaskInput... but at that point I have basically mirrored
+	// ecs.RunTaskInput and could just use that unless my own struct could abstract it
+	// in some useful manner for register, deregister, run, etc.
+
+	input := ecs.RunTaskInput{}
+
+	if cluster, ok := config["cluster"]; ok {
+		input.SetCluster(cluster.(string))
+	}
+
+	if count, ok := config["count"]; ok {
+		input.SetCount(count.(int64))
+	}
+	// Not sure I care for this. the config read in will have family, which is what we want to run
+	// but if user specifies more specifically on the command line such as to run a specific revision,
+	// then that's no good - that is where
+	// a separate args struct becomes good
+	// taskDefinition := config["taskDefinition"].(string)
+	if taskDefinition, ok := config["family"]; ok {
+		input.SetTaskDefinition(taskDefinition.(string))
+	}
+	if launchType, ok := config["launchType"]; ok {
+		input.SetLaunchType(launchType.(string))
+	}
+
+	networkConfig, err := netconfig.NewNetworkConfiguration(config)
+
+	input.SetNetworkConfiguration(&networkConfig)
+	if err != nil {
+		return input, err
+	}
+
+	return input, input.Validate()
 }

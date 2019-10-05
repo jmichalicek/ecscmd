@@ -72,10 +72,10 @@ func Execute() {
 }
 
 func init() {
+	// TODO: is there a good way I can pull this stuff out of init() and do it more like
+	// https://www.netlify.com/blog/2016/09/06/creating-a-microservice-boilerplate-in-go/ but with all
+	// the subcommands, etc?
 	cobra.OnInitialize(initConfig)
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
 	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
 	rootCmd.PersistentFlags().StringVar(&baseConfig.logLevel, "log-level", "INFO", "Minimum level for log messages. Default is INFO.")
 	// TODO: Make this per command just to provide more specific help/description for how it affects that command?

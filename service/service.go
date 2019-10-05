@@ -9,13 +9,8 @@ package service
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
-	// "github.com/aws/aws-sdk-go/aws/awserr"
-	// "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	// "fmt"
-	// "bytes"
-	// "encoding/json"
-	// "log"
+	netconfig "github.com/jmichalicek/ecscmd/network_configuration"
 )
 
 /*
@@ -49,34 +44,11 @@ func NewUpdateServiceInput(config map[string]interface{}) (*ecs.UpdateServiceInp
 		}
 	}
 
-	awsVpcConfig := &ecs.AwsVpcConfiguration{}
-	if assignPublicIp, ok := config["assignPublicIp"]; ok {
-		awsVpcConfig = awsVpcConfig.SetAssignPublicIp(assignPublicIp.(string))
-	}
-
-	if securityGroupIds, ok := config["securityGroups"]; ok {
-		g := securityGroupIds.([]interface{})
-		securityGroups := make([]*string, len(g))
-		for i := range g {
-			groupId := securityGroupIds.([]interface{})[i].(string)
-		  securityGroups[i] = &groupId
-		}
-		awsVpcConfig = awsVpcConfig.SetSecurityGroups(securityGroups)
-	}
-
-	if subnetIds, ok := config["subnets"]; ok {
-		s := subnetIds.([]interface{})
-		subnets := make([]*string, len(s))
-		for i := range s {
-			subnetId := subnetIds.([]interface{})[i].(string)
-		  subnets[i] = &subnetId
-		}
-		awsVpcConfig = awsVpcConfig.SetSubnets(subnets)
-	}
-
-	// TODO: assumptions made here about vpc config assuming that this is for a Fargate service
-	networkConfig := ecs.NetworkConfiguration{AwsvpcConfiguration: awsVpcConfig}
+	networkConfig, err := netconfig.NewNetworkConfiguration(config)
 	input.SetNetworkConfiguration(&networkConfig)
+	if err != nil {
+		return input, err
+	}
 
 	// TODO: other otpions
 	// fmt.Printf("\n\nINPUT: %v\n\n", input)
