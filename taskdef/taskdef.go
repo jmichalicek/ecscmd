@@ -12,8 +12,8 @@ import (
 	// "log"
 )
 
-const fargate = "FARGATE"
-const ec2 = "EC2"
+const FARGATE = "FARGATE"
+const EC2 = "EC2"
 
 // register-task-def stuff
 
@@ -71,7 +71,7 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 		input = input.SetMemory(val.(string))
 	}
 
-	if len(input.RequiresCompatibilities) == 1 && fargate == *input.RequiresCompatibilities[0] {
+	if len(input.RequiresCompatibilities) == 1 && FARGATE == *input.RequiresCompatibilities[0] {
 		// Fargate requires awsvpc network mode
 		input = input.SetNetworkMode("awsvpc")
 	} else {
@@ -131,6 +131,7 @@ func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
 	if taskDefinition, ok := config["family"]; ok {
 		input.SetTaskDefinition(taskDefinition.(string))
 	}
+
 	if launchType, ok := config["launchType"]; ok {
 		input.SetLaunchType(launchType.(string))
 	}
