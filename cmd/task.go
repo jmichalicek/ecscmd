@@ -182,46 +182,32 @@ var cmdRunTask = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// create once here whether its needed or not
-		// otherwise this is simpler
-		taskArn := result.Tasks[0].TaskArn
-		describeTaskInput := &ecs.DescribeTasksInput{
-			Cluster: runTaskInput.Cluster,
-			Tasks: []*string{taskArn},
-		}
-
 		if runTaskOptions.WaitForComplete || runTaskOptions.StreamOutput {
-			fmt.Println("WAIT FOR COMPLETE!!!!!")
 			taskCompleteChannel := make(chan bool)
 			cloudWatchChannel := make(chan string)
+			taskArn := result.Tasks[0].TaskArn
+			describeTaskInput := &ecs.DescribeTasksInput{
+				Cluster: runTaskInput.Cluster,
+				Tasks: []*string{taskArn},
+			}
 			// TODO: I feel like these should be their own functions, not nested here.
-			// alternately: the go func() could print the dots and then just do these waits not in a channel
-			// and that may be what needs to be done once the cloudwatch logs are streaming so that it is not
-			// interspersed with dots.
 			go func() {
-				// TODO: run these in a channel so that I can do some nice `. . . .` one per second output to show
-				// that something is happening or show the latest status from DescribeTasks, etc.
 				if err := client.WaitUntilTasksRunning(describeTaskInput); err != nil {
-					// fmt.Printf("[ERROR] %s\n", err)
-					// os.Exit(1)
 					fmt.Printf("\n[ERROR] %s\n", err)
 					taskCompleteChannel <- false
 					return
 				}
 
 				fmt.Println("Task Started")
-
 				// stopping via the web console doesn't seem to cause this waiter to stop.
 				if err := client.WaitUntilTasksStopped(describeTaskInput); err != nil {
 					// I have actually seen these waiters take longer than the timeout but the thing actually work
 					// but it's rare
-					// fmt.Printf("[ERROR] %s\n", err)
-					// os.Exit(1)
 					fmt.Printf("\n[ERROR] %s\n", err)
 					taskCompleteChannel <- false
 					return
 				}
-				fmt.Printf("Task stopped!")
+				fmt.Println("Task complete!")
 				taskCompleteChannel <- true
 			}()
 
@@ -237,51 +223,33 @@ var cmdRunTask = &cobra.Command{
 				logEventsInput.SetLogGroupName(*logGroup)
 				logEventsInput.SetLogStreamName(logStreamName)
 				// should maybe wait for task to start using a channel for that!
+
 				for {
+					output, _ := cwclient.GetLogEvents(logEventsInput)
+					// TODO: actually do something with the error but many of these errors are just temporary while waiting
+					for _, event := range output.Events {
+							// event.Timetstamp is unix epoch MILLISECONDS
+							// TODO: allow structured output - convert the whole event to json and dump it
+							// TODO: allow timestamp in desired timezone
+					    fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp / 1000, 0).In(time.UTC), *event.Message)
+					}
+					logEventsInput.NextToken = output.NextForwardToken
+
+					// check to see if the task has completed so we can exit or sleep before the next api call
 					select {
 					case <- taskCompleteChannel:
 						return
 					default:
-						output, err := cwclient.GetLogEvents(logEventsInput)
-						// output.Events is a list of... strings?
-						// and then output.NextForwardToken to get the next batch
-						if err != nil {
-							fmt.Printf("%s", err)
-							time.Sleep(time.Second * 10)
-						}
-						fmt.Printf("%v", output)
-						time.Sleep(time.Second)
+						// TODO: configurable sleep time?
+						time.Sleep(time.Second * 3) // Randomly selected sleep time
 					}
 
 				}
-
-				// watch the cloudwatch logs
-				// print out the info
-				// return when done
-				// this may actually need its own select and channel for loop - one for streaming logs
-				// and one for being done
-				// or it could just send output over a channel for the main select....
-				// but this needs to know when to exit either way...
 			}
 
 			if runTaskOptions.StreamOutput {
-				streamCloudwatchLogs()
+				go streamCloudwatchLogs()
 			}
-
-			// var showProgress := func() {
-			//  Could do this as a go routine rather than using the default on the select
-			// 	for {
-			// 		select {
-			// 		case d := <-taskCompleteChannel:
-			// 			return
-			// 		default:
-			// 			fmt.Printf(".")
-			// 			time.Sleep(time.Second)
-			// 		}
-			// 		fmt.Printf(".")
-			// 		time.Sleep(time.Second)
-			// 	}
-			// }()
 
 			done := false
 			for {
@@ -297,6 +265,7 @@ var cmdRunTask = &cobra.Command{
 						done = true
 					default:
 						if !runTaskOptions.StreamOutput {
+							// TODO: print dots UNTIL it is running?
 							fmt.Printf(".")
 							time.Sleep(time.Second)
 						}
@@ -308,11 +277,6 @@ var cmdRunTask = &cobra.Command{
 			close(taskCompleteChannel)
 			close(cloudWatchChannel)
 		}
-
-
-		// fmt.Printf("AWS Response:\n%v\n", result)
-		// TODO: waiter to wait for complete, stream output from cloudwatch, etc.
-
 	},
 }
 
