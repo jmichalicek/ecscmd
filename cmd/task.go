@@ -26,27 +26,41 @@ import (
 	"github.com/spf13/cobra"
 	"log"
 	"os"
-	"time"
 	"strings"
+	"time"
 )
 
 // Limited subset of functionality for now
+// TODO: Need to see if this will work well to set with koanf and then override from command line
+// or do I need two separate structs - one for koanf to set and a separate one for cobra to save command
+// line options to.
 type runTaskCommandOptions struct {
-	Cluster string `koanf:"cluster"`
-	Count int64 `koanf:"count"`
-	Group string `koanf:"group"`
-	TaskDefinition string `koanf:"family"`
+	Cluster         string `koanf:"cluster"`
+	Count           int64  `koanf:"count"`
+	Group           string `koanf:"group"`
+	TaskDefinition  string `koanf:"family"`
 	WaitForComplete bool
-	StreamOutput bool
-	Fargate bool
+	StreamOutput    bool
+	Fargate         bool
 	// EnableECSManagedTags bool
 	// The name of the task group to associate with the task. The default value
-  // is the family name of the task definition (for example, family:my-family-name).
+	// is the family name of the task definition (for example, family:my-family-name).
 }
 
 // TODO: this is gross and clunky. I may have to look into something other than cobra... or maybe
 // I am doing something wrong. Some of their examples were like this.
 var runTaskOptions runTaskCommandOptions = runTaskCommandOptions{Fargate: true}
+
+type registerTaskDefCommandOptions struct {
+	TemplateVars            []string // can be used to set template vars which are not in the koanf settings or to override them
+	Family                  string
+	RequiresCompatibilities []string
+	cpu                     int64
+	memory                  int64
+	template                string
+}
+
+var registerTaskOptions registerTaskDefCommandOptions = registerTaskDefCommandOptions{}
 
 // serviceCmd represents the service command
 var taskCmd = &cobra.Command{
@@ -72,8 +86,15 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		var taskDefName = args[0]
 		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
-		// taskDefConfig := k.Get(configKey).(map[string]interface{})
-		taskDefConfig := k.Cut(configKey).Raw()
+		taskDefConfig := k.Get(configKey).(map[string]interface{})
+		// taskDefConfig = k.Cut(configKey).Raw()  // had reason for using this, but not sure what it was. Possibly same end result as above anyway.
+		// Get a correctly typed template variables so that it can be accessed via index and updated
+		var tvars map[string]interface{} = taskDefConfig["templatevars"].(map[string]interface{})
+		for _, tvar := range registerTaskOptions.TemplateVars {
+			// very naive, but should work for 99% of cases... a key with an = in it would be weird
+			s := strings.SplitN(tvar, "=", 2)
+			tvars[s[0]] = s[1]
+		}
 		// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
 		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
 		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
@@ -112,8 +133,8 @@ var cmdRunTask = &cobra.Command{
 	// TODO: deal with using either the actual task def name/family/arn OR our local config name
 	Use:   "run taskDefName",
 	Short: "Run an ECS task. Currently assumes a Fargate launch type.",
-	Long: `Run an ECS task. Currently assumes a Fargate launch type.`,
-	Args: cobra.MinimumNArgs(1),
+	Long:  `Run an ECS task. Currently assumes a Fargate launch type.`,
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: Wow, this has gotten messy after starting to add logstream watching... needs cleaned up even more than I feared it would
 		// TODO: really should make the name of the config optional - may want to run a task
@@ -141,7 +162,7 @@ var cmdRunTask = &cobra.Command{
 		// TODO: Put this in a function somewhere or really I think I do need wrapper Task and TaskDef structs maybe
 		taskDefFam := config["family"].(string)
 		describeTaskDefInput := &ecs.DescribeTaskDefinitionInput{
-    	TaskDefinition: &taskDefFam,
+			TaskDefinition: &taskDefFam,
 		}
 		descTaskDef, err := client.DescribeTaskDefinition(describeTaskDefInput)
 		if err != nil {
@@ -167,7 +188,8 @@ var cmdRunTask = &cobra.Command{
 		// TODO: Make a nice interface to use for these and a single "dostuff()"
 		// function which takes that interface - then could call mything.DryRun()
 		// or MyConfig.Execute() and those could return a standard interface and errors
-		// and then the if err != nil stuff could live in one place instead of every Run function
+		// and then the if err != nil stuff could live
+ in one place instead of every Run function
 		// Unsure how to abstract stuff like waiting on a waiter, though.
 		if baseConfig.dryRun {
 			// TODO: better output here - really should try to look up the task def on aws
@@ -184,11 +206,14 @@ var cmdRunTask = &cobra.Command{
 
 		if runTaskOptions.WaitForComplete || runTaskOptions.StreamOutput {
 			taskCompleteChannel := make(chan bool)
+			// TODO: not actually making use of cloudWatchChannel right now. A better use would be
+			// to return an object with the cloudwatch info from it, allowing streamCloudwatchLogs() to be more generic
+			// and whatever uses it to print that data or otherwise as needed.
 			cloudWatchChannel := make(chan string)
 			taskArn := result.Tasks[0].TaskArn
 			describeTaskInput := &ecs.DescribeTasksInput{
 				Cluster: runTaskInput.Cluster,
-				Tasks: []*string{taskArn},
+				Tasks:   []*string{taskArn},
 			}
 			// TODO: I feel like these should be their own functions, not nested here.
 			go func() {
@@ -228,16 +253,16 @@ var cmdRunTask = &cobra.Command{
 					output, _ := cwclient.GetLogEvents(logEventsInput)
 					// TODO: actually do something with the error but many of these errors are just temporary while waiting
 					for _, event := range output.Events {
-							// event.Timetstamp is unix epoch MILLISECONDS
-							// TODO: allow structured output - convert the whole event to json and dump it
-							// TODO: allow timestamp in desired timezone
-					    fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp / 1000, 0).In(time.UTC), *event.Message)
+						// event.Timetstamp is unix epoch MILLISECONDS
+						// TODO: allow structured output - convert the whole event to json and dump it
+						// TODO: allow timestamp in desired timezone
+						fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp/1000, 0).In(time.UTC), *event.Message)
 					}
 					logEventsInput.NextToken = output.NextForwardToken
 
 					// check to see if the task has completed so we can exit or sleep before the next api call
 					select {
-					case <- taskCompleteChannel:
+					case <-taskCompleteChannel:
 						return
 					default:
 						// TODO: configurable sleep time?
@@ -254,21 +279,21 @@ var cmdRunTask = &cobra.Command{
 			done := false
 			for {
 				select {
-					case s := <- cloudWatchChannel:
+				case s := <-cloudWatchChannel:
 					fmt.Printf("%s", s)
-					case s := <- taskCompleteChannel:
-						// Relying on the waiter function to print the errors. Not so sure that's a great idea long term.
-						// thinking maybe two channels... taskErrors, taskOutput which would keep all output here.
-						if !s {
-							os.Exit(1)
-						}
-						done = true
-					default:
-						if !runTaskOptions.StreamOutput {
-							// TODO: print dots UNTIL it is running?
-							fmt.Printf(".")
-							time.Sleep(time.Second)
-						}
+				case s := <-taskCompleteChannel:
+					// Relying on the waiter function to print the errors. Not so sure that's a great idea long term.
+					// thinking maybe two channels... taskErrors, taskOutput which would keep all output here.
+					if !s {
+						os.Exit(1)
+					}
+					done = true
+				default:
+					if !runTaskOptions.StreamOutput {
+						// TODO: print dots UNTIL it is running if we are streaming output?
+						fmt.Printf(".")
+						time.Sleep(time.Second)
+					}
 				}
 				if done {
 					break
@@ -286,20 +311,11 @@ func init() {
 	taskCmd.AddCommand(cmdRunTask)
 
 	// TODO: still gross. I want these processed AFTER reading options from config, anyway.
+	cmdRegisterTaskDef.Flags().StringArrayVar(&registerTaskOptions.TemplateVars, "template-var", []string{}, "Specify a template variable name and value for use in the task definition template. --template-var\"name=value\". May be specified multiple times to set multiple variables.")
+
 	cmdRunTask.Flags().StringVar(&runTaskOptions.TaskDefinition, "task-definition", "", "Task definition arn for the task to run. This could be full arn, family, or family:revision")
 	cmdRunTask.Flags().StringVar(&runTaskOptions.Cluster, "cluster", "", "Cluster to run the task on. Defaults to AWS default cluster.")
 	cmdRunTask.Flags().Int64Var(&runTaskOptions.Count, "count", 1, "How many of this task to run.")
 	cmdRunTask.Flags().BoolVar(&runTaskOptions.WaitForComplete, "wait-for-stop", false, "Wait for the task to complete before continuing.")
 	cmdRunTask.Flags().BoolVar(&runTaskOptions.StreamOutput, "stream-logs", false, "Stream cloudwatch logs for the task.")
-
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// serviceCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// serviceCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
