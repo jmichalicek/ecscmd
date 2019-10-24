@@ -22,7 +22,6 @@ import (
 	"github.com/jmichalicek/ecscmd/service"
 	"github.com/jmichalicek/ecscmd/session"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 // should/could this be a pflag thing? that might actually clean up the cobra + koanf stuff
@@ -72,14 +71,16 @@ var createServiceCmd = &cobra.Command{
 	Use:   "create <serviceName>",
 	Short: "Create a new ECS service using defaults from the configuration name provided",
 	Args:  cobra.MinimumNArgs(1), // maybe make this an optional flag --config-profile ?
-	Run: func(cmd *cobra.Command, args []string) {
+	// TODO: switch to RunE() which returns an error!
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO: if service already exists we get a not so clear error "InvalidParameterException: Creation of service was not idempotent."
 		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
 		var configName = args[0]
 		var configKey = fmt.Sprintf("service.%s", configName)
-		// k2 := k.Cut(configKey)
-		// serviceConfig := k2.Raw()
+		if !k.Exists(configKey) {
+			return fmt.Errorf("No service configuration named %s", configName)
+		}
 		serviceConfig := k.Cut(configKey).Raw()
 
 		// TODO: again, super clunky and inelegant... there must be a better way, but mixing Cobra for its nested commands
@@ -106,13 +107,12 @@ var createServiceCmd = &cobra.Command{
 		// and this.
 		i, err := service.NewCreateServiceInput(serviceConfig)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
-		log.Printf("[DEBUG] %v", i)
 
 		session, err := session.NewAwsSession(serviceConfig)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
@@ -125,10 +125,12 @@ var createServiceCmd = &cobra.Command{
 		} else {
 			result, err := client.CreateService(i)
 			if err != nil {
-				log.Fatalf("[ERROR] %s", err)
+				return err
 			}
-			log.Printf("[INFO] AWS Response:\n%v\n", result)
+			// TODO: Abstract this output somewhere
+			fmt.Printf("Created service: %s\n", *result.Service.ServiceArn)
 		}
+		return nil
 	},
 }
 
@@ -138,13 +140,14 @@ var updateServiceCmd = &cobra.Command{
 	Short: "Update an existing ECS Service",
 	Long:  `Update an existing ECS Service`,
 	Args:  cobra.MinimumNArgs(1), // maybe make this an optional flag --config-profile ?
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		// TODO: skip grouping as sevice.* and taskdef.* and just use name?
 		var configName = args[0]
 		var configKey = fmt.Sprintf("service.%s", configName)
-		// k2 := k.Cut(configKey)
-		// serviceConfig := k2.Raw()
+		if !k.Exists(configKey) {
+			return fmt.Errorf("No service configuration named %s", configName)
+		}
 		serviceConfig := k.Cut(configKey).Raw()
 
 		// TODO: again, super clunky and inelegant... there must be a better way, but mixing Cobra for its nested commands
@@ -174,13 +177,12 @@ var updateServiceCmd = &cobra.Command{
 		// and this.
 		i, err := service.NewUpdateServiceInput(serviceConfig)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
-		log.Printf("[DEBUG] %v", i)
 
 		session, err := session.NewAwsSession(serviceConfig)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
@@ -193,11 +195,27 @@ var updateServiceCmd = &cobra.Command{
 		} else {
 			result, err := client.UpdateService(i)
 			if err != nil {
-				log.Fatalf("[ERROR] %s", err)
+				return err
 			}
 
-			log.Printf("[INFO] AWS Response:\n%v\n", result)
+			// TODO: json output... can just fmt.Println(result) to get this, I think
+			// {
+			//   Cluster: "JustinTest",
+			//   ForceNewDeployment: true,
+			//   NetworkConfiguration: {
+			//     AwsvpcConfiguration: {
+			//       AssignPublicIp: "ENABLED",
+			//       SecurityGroups: ["sg-00f5b0f63173ab117","sg-0ebbfce12e6aaa9f9"],
+			//       Subnets: ["subnet-1fd2c945"]
+			//     }
+			//   },
+			//   Service: "JustinTestFargate",
+			//   TaskDefinition: "testTaskDef"
+			// }
+			fmt.Printf("Updated service: %s\n", *result.Service.ServiceArn)
+			// TODO: options to wait for service to become stable/actually be updated?
 		}
+		return err
 
 	},
 }
