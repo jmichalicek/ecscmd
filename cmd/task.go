@@ -189,7 +189,7 @@ var cmdRunTask = &cobra.Command{
 		// function which takes that interface - then could call mything.DryRun()
 		// or MyConfig.Execute() and those could return a standard interface and errors
 		// and then the if err != nil stuff could live
- in one place instead of every Run function
+ 		// in one place instead of every Run function
 		// Unsure how to abstract stuff like waiting on a waiter, though.
 		if baseConfig.dryRun {
 			// TODO: better output here - really should try to look up the task def on aws
