@@ -41,6 +41,28 @@ func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition,
 	return cdefs, err
 }
 
+// TODO the volumes stuff here is a hack to get stuff done at the moment. Not sure another template is really a good way to go.
+// probably want volumes config in the toml
+func ParseVolumeDefTemplate(config map[string]interface{}) ([]byte, error) {
+	templateFile := config["volumetemplate"].(string)
+	templateVars := config["templatevars"]
+	t := template.Must(template.ParseFiles(templateFile))
+
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, templateVars); err != nil {
+		return tpl.Bytes(), err
+	}
+	result := tpl.Bytes()
+	return result, nil
+}
+
+func MakeVolumesDefinitions(volumeDefs []byte) ([]*ecs.Volume, error) {
+	// TODO: is this useful or should this just be what ParseContainerDefTemplate() does?
+	var defs []*ecs.Volume
+	err := json.Unmarshal(volumeDefs, &defs)
+	return defs, err
+}
+
 /*
  * Takes the dict for config for a taskdefinition + a slice of *ecs.ContainerDefinition to build
  * the ecs.TaskDefinitionInput.

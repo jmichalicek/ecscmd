@@ -99,12 +99,25 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
 		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
 		cdef, err := taskdef.MakeContainerDefinitions(containerDefBytes)
+
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
 		if err != nil {
 			log.Fatalf("[ERROR] %s", err)
 		}
+
+		// TODO: this is a hack.  optional volumes. This is a bit of a hack for now.
+		// should probably make a volumes section i the .toml
+		if _, ok := taskDefConfig["volumetemplate"]; ok {
+			volumeBytes, err := taskdef.ParseVolumeDefTemplate(taskDefConfig)
+			if err != nil {
+				return err
+			}
+			vdef, err := taskdef.MakeVolumesDefinitions(volumeBytes)
+			i = i.SetVolumes(vdef)
+		}
+
 
 		session, err := session.NewAwsSession(taskDefConfig)
 		if err != nil {
@@ -239,7 +252,9 @@ var cmdRunTask = &cobra.Command{
 			streamCloudwatchLogs := func() {
 				taskArn := result.Tasks[0].TaskArn
 				parts := strings.Split(*taskArn, "/")
-				taskId := parts[2]
+				// seems this can vary or has changed when I updated the sdk version...
+				// taskId := parts[2]
+				taskId := parts[len(parts)-1]
 				cwclient := cloudwatchlogs.New(session)
 				logStreamName = logStreamName + taskId
 				logEventsInput := &cloudwatchlogs.GetLogEventsInput{}
