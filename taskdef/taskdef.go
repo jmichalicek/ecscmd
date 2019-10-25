@@ -111,8 +111,81 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 		input = input.SetTaskRoleArn(val.(string))
 	}
 
+	if vols, ok := config["volumes"]; ok {
+		volumeConfigs := vols.([]interface{})
+		volumes := make([]*ecs.Volume, len(volumeConfigs))
+		for i := range volumeConfigs {
+			volume, err := makeEcsVolume(volumeConfigs[i].(map[string]interface{}))
+			if err != nil {
+				return input, err // seems like this could be confusing
+			}
+			volumes[i] = volume
+		}
+		// input.RequiresCompatibilities = requiredCompats
+		input = input.SetVolumes(volumes)
+	}
+
 	// fmt.Printf("\n\nINPUT: %v\n\n", input)
 	return input, input.Validate()
+}
+
+// TODO: Or I could just use ecs.Volume and ecs.DockerVolumeConfiguration...
+// That gets annoying with the []*string though for Labels and DriverOpts
+// the json marshall/unmarshall is less code to look at
+type dockerVolumeConfig struct {
+	Labels []string
+	Scope string
+	Driver string
+}
+
+type volume struct {
+	Name string
+	DockerVolumeConfiguration dockerVolumeConfig
+}
+/* newEcsVolume retuns a *ecs.Volume from ecscmd volume configuration data */
+func makeEcsVolume(volumeConfig map[string]interface{}) (*ecs.Volume, error) {
+	// TODO: really need to make a proper struct for all this I think and unmarshal from koanf to that
+	// rather than all this mucking around with map[string]interface{}
+	// Can I just do this?
+
+	// TODO: this is not quite right, need to shuffle some of this about to
+	// {
+  //     "name": "a_name",
+  //     "host": null,
+  //     "dockerVolumeConfiguration": {
+  //         "autoprovision": null,
+  //         "labels": null,
+  //         "scope": "task",
+  //         "driver": "local",
+  //         "driverOpts": null
+  //     }
+  // }
+
+	// todo: struct for this?
+	// docker_volume_config := map[string]interface{}{"labels": volumeConfig["labels"], "scope": volumeConfig["scope"], "driver": volumeConfig["driver"]}
+	dvc := dockerVolumeConfig{Labels: volumeConfig["labels"].([]string), Scope: volumeConfig["scope"].(string), Driver: volumeConfig["driver"].(string)}
+	vol := volume{Name: volumeConfig["name"].(string), DockerVolumeConfiguration: dvc}
+	configJson, err := json.Marshal(vol)
+	if err != nil {
+		return nil, err
+	}
+	var volume *ecs.Volume
+	err = json.Unmarshal(configJson, volume)
+	return volume, err
+
+
+	// v := ecs.Volume{Name: volumeConfig["name"], Driver: volumeConfig["driver"], Scope: volumeConfig["scope"]}
+	// if l, ok := volumeConfig["labels"]; ok {
+	// 	ll := l.([]string)
+	// 	labels := make([]*string, len(ll))
+	// 	for i := range ll {
+	// 		label := ll[i].(string)
+	// 		labels[i] = &label
+	// 	}
+	// }
+	// // TODO: DriverOpts... really starting to wonder if this should just be handled via json, even if it's just
+	// // json in the toml as a string...
+	// return v
 }
 
 func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
