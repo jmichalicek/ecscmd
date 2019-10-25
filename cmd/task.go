@@ -24,8 +24,6 @@ import (
 	"github.com/jmichalicek/ecscmd/session"
 	"github.com/jmichalicek/ecscmd/taskdef"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
 	"strings"
 	"time"
 )
@@ -82,12 +80,14 @@ var cmdRegisterTaskDef = &cobra.Command{
 	Long: `Register a new task definition or update an existing task definition.
     A taskDefinition section should exist in the config file`,
 	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO: too much going on here... or will be. This needs to be its own function defined elsewhere
 		var taskDefName = args[0]
 		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
-		taskDefConfig := k.Get(configKey).(map[string]interface{})
-		// taskDefConfig = k.Cut(configKey).Raw()  // had reason for using this, but not sure what it was. Possibly same end result as above anyway.
+		if !k.Exists(configKey) {
+			return fmt.Errorf("No task definition configuration named %s", taskDefName)
+		}
+		taskDefConfig := k.Cut(configKey).Raw()
 		// Get a correctly typed template variables so that it can be accessed via index and updated
 		var tvars map[string]interface{} = taskDefConfig["templatevars"].(map[string]interface{})
 		for _, tvar := range registerTaskOptions.TemplateVars {
@@ -104,7 +104,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// and this.
 		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
 
 		// TODO: this is a hack.  optional volumes. This is a bit of a hack for now.
@@ -121,7 +121,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 
 		session, err := session.NewAwsSession(taskDefConfig)
 		if err != nil {
-			log.Fatalf("[ERROR] %s", err)
+			return err
 		}
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
@@ -132,13 +132,12 @@ var cmdRegisterTaskDef = &cobra.Command{
 		} else {
 			result, err := taskdef.RegisterTaskDefinition(i, client)
 			if err != nil {
-				log.Fatalf("[ERROR] %s", err)
+				return err
 			}
-			// not sure how I feel about using log vs fmt here. If actually going into a log, the timestamp is great
-			// but for regular useful user output...meh. May just want to do both stdout and log
-			log.Printf("[INFO] AWS Response:\n%v\n", result)
+			// TODO: Abstract output sooner for various verbosities and formats.
+			fmt.Printf("Registered task defintion: %s\n", *result.TaskDefinition.TaskDefinitionArn)
 		}
-
+		return nil
 	},
 }
 
@@ -148,17 +147,19 @@ var cmdRunTask = &cobra.Command{
 	Short: "Run an ECS task. Currently assumes a Fargate launch type.",
 	Long:  `Run an ECS task. Currently assumes a Fargate launch type.`,
 	Args:  cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO: Wow, this has gotten messy after starting to add logstream watching... needs cleaned up even more than I feared it would
 		// TODO: really should make the name of the config optional - may want to run a task
 		// which there is no local config for
 		var taskDefName = args[0]
 		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
+		if !k.Exists(configKey) {
+			return fmt.Errorf("No task definition configuration named %s", taskDefName)
+		}
 		config := k.Cut(configKey).Raw()
 		session, err := session.NewAwsSession(config)
 		if err != nil {
-			fmt.Printf("[ERROR] %s", err)
-			os.Exit(1)
+			return err
 		}
 
 		// TODO: clunky and gross
@@ -179,8 +180,7 @@ var cmdRunTask = &cobra.Command{
 		}
 		descTaskDef, err := client.DescribeTaskDefinition(describeTaskDefInput)
 		if err != nil {
-			fmt.Printf("%s", err)
-			os.Exit(1)
+			return err
 		}
 		// TODO: assuming a single container task. Handle multi-container later... fancier logging, specify the container, etc.
 		logConfig := descTaskDef.TaskDefinition.ContainerDefinitions[0].LogConfiguration.Options
@@ -193,8 +193,7 @@ var cmdRunTask = &cobra.Command{
 		// TODO: look up task def, get log stream info
 		runTaskInput, err := taskdef.NewRunTaskInput(config)
 		if err != nil {
-			fmt.Printf("[ERROR] %s", err)
-			os.Exit(1)
+			return err
 		}
 
 		// handle the output.
@@ -207,18 +206,20 @@ var cmdRunTask = &cobra.Command{
 		if baseConfig.dryRun {
 			// TODO: better output here - really should try to look up the task def on aws
 			fmt.Printf("Would run task %v\n", config)
-			os.Exit(0)
+			return nil
 		}
 
 		result, err := client.RunTask(&runTaskInput)
 		// result, err := taskdef.RegisterTaskDefinition(i, client)
 		if err != nil {
-			fmt.Printf("[ERROR] %s\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		if runTaskOptions.WaitForComplete || runTaskOptions.StreamOutput {
 			taskCompleteChannel := make(chan bool)
+			// TODO may want this to take a struct with true/false and an error or just take an error
+			// then the goroutines can return the error, if any, or nil, and code can exit or whatever from there.
+
 			// TODO: not actually making use of cloudWatchChannel right now. A better use would be
 			// to return an object with the cloudwatch info from it, allowing streamCloudwatchLogs() to be more generic
 			// and whatever uses it to print that data or otherwise as needed.
@@ -231,7 +232,7 @@ var cmdRunTask = &cobra.Command{
 			// TODO: I feel like these should be their own functions, not nested here.
 			go func() {
 				if err := client.WaitUntilTasksRunning(describeTaskInput); err != nil {
-					fmt.Printf("\n[ERROR] %s\n", err)
+					fmt.Println(err.Error())
 					taskCompleteChannel <- false
 					return
 				}
@@ -241,7 +242,7 @@ var cmdRunTask = &cobra.Command{
 				if err := client.WaitUntilTasksStopped(describeTaskInput); err != nil {
 					// I have actually seen these waiters take longer than the timeout but the thing actually work
 					// but it's rare
-					fmt.Printf("\n[ERROR] %s\n", err)
+					fmt.Println(err.Error())
 					taskCompleteChannel <- false
 					return
 				}
@@ -271,6 +272,10 @@ var cmdRunTask = &cobra.Command{
 						// event.Timetstamp is unix epoch MILLISECONDS
 						// TODO: allow structured output - convert the whole event to json and dump it
 						// TODO: allow timestamp in desired timezone
+						// TODO: abstract this elsewhere - will need reused for a general stream task logs command
+						//       and have cloudWatchChannel allow the message to be passed back - maybe just the message
+						//			 and do the rest of the formatting elsewhere? or pass back the formatted message?
+						//			 Probably abstract into my own struct with a PrettyPrint() receiver
 						fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp/1000, 0).In(time.UTC), *event.Message)
 					}
 					logEventsInput.NextToken = output.NextForwardToken
@@ -300,7 +305,8 @@ var cmdRunTask = &cobra.Command{
 					// Relying on the waiter function to print the errors. Not so sure that's a great idea long term.
 					// thinking maybe two channels... taskErrors, taskOutput which would keep all output here.
 					if !s {
-						os.Exit(1)
+						//  TODO: not really nil, but we already printed the error - see comment on next line
+						return nil // again, if taskCompleteChannel was returning an error this would be better
 					}
 					done = true
 				default:
@@ -317,6 +323,7 @@ var cmdRunTask = &cobra.Command{
 			close(taskCompleteChannel)
 			close(cloudWatchChannel)
 		}
+		return nil
 	},
 }
 

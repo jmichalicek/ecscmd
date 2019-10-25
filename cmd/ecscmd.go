@@ -17,17 +17,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/hashicorp/logutils"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
-	"log"
 	"os"
 	"path"
-	"strings"
 )
 
 // type rootConfig struct {
@@ -39,7 +36,6 @@ import (
 // mauy make these public like my initial example above
 type rootConfig struct {
 	configFile string
-	logLevel   string
 	dryRun     bool
 }
 
@@ -66,8 +62,7 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		exitWithError(err)
 	}
 }
 
@@ -77,7 +72,6 @@ func init() {
 	// the subcommands, etc?
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
-	rootCmd.PersistentFlags().StringVar(&baseConfig.logLevel, "log-level", "INFO", "Minimum level for log messages. Default is INFO.")
 	// TODO: Make this per command just to provide more specific help/description for how it affects that command?
 	rootCmd.PersistentFlags().BoolVar(&baseConfig.dryRun, "dry-run", false, "Perform dry-run. Does not actually send command. Output info about what would have been performed.")
 	// rootCmd.PersistentFlags().StringVar(rconf.AwsProfile, "profile", "", "profile to use from ~/.aws/config and ~/.aws/credentials")
@@ -85,18 +79,10 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	// This is when cobra has initialized and so logLevel has been properly set
-	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR"},
-		MinLevel: logutils.LogLevel(strings.ToUpper(baseConfig.logLevel)),
-		Writer:   os.Stderr,
-	}
-	log.SetOutput(filter)
-
 	// This might be built into golang 1.12
 	home, err := homedir.Dir()
 	if err != nil {
-		log.Fatal(err)
+		exitWithError(err)
 	}
 	// TODO: look in current dir first, then in home
 	// TODO: other config file formats, custom config file path from command line
@@ -104,13 +90,14 @@ func initConfig() {
 		if canUseFile(baseConfig.configFile) {
 			k.Load(file.Provider(baseConfig.configFile), toml.Parser())
 		} else {
-			log.Fatalf("[ERROR] Cannot load specified config file: %s", baseConfig.configFile)
+			exitWithError(fmt.Errorf("Cannot load specified config file: %s", baseConfig.configFile))
 		}
 	} else {
 		// TODO: which should take precedence? ~/.ecscmd.toml FIRST to load defaults and then override project specific
 		// or local dir first (as is now) to provide general, in code repo default, and let user override with ~/.ecscmd.toml
 		// TODO: load other config file formats... .yml, etc.
 		// TODO: may switch to yaml by default (or only) - I like it better for the config structure ecscmd needs.
+		// TODO: for configs -- allow multiple --config="foo.toml" and parse in order, later ones overriding earlier ones?
 		projectConfig := path.Join(".", ".ecscmd.toml")
 		if canUseFile(projectConfig) {
 			k.Load(file.Provider(projectConfig), toml.Parser())
@@ -135,4 +122,9 @@ func canUseFile(filename string) bool {
 	}
 	// there could be other errors wher the file exists but is not usable still for some reason.
 	return err == nil && !info.IsDir()
+}
+
+func exitWithError(err error) {
+	fmt.Println(err.Error())
+	os.Exit(1)
 }

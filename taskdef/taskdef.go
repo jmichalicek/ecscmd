@@ -9,7 +9,6 @@ import (
 	// "fmt"
 	"bytes"
 	"encoding/json"
-	// "log"
 )
 
 const FARGATE = "FARGATE"
