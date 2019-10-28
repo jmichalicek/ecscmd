@@ -112,14 +112,14 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 	}
 
 	if vols, ok := config["volumes"]; ok {
+		// not []map[string]string because the labels key is a list and driveropts is another map
+		// TODO: if I have koanf just deserialize to a struct, can I have it just deserialize to
+		// the aws-sdk-go types or do I need my own struct in the middle?
 		volumeConfigs := vols.([]interface{})
 		volumes := make([]*ecs.Volume, len(volumeConfigs))
-		for i := range volumeConfigs {
-			volume, err := makeEcsVolume(volumeConfigs[i].(map[string]interface{}))
-			if err != nil {
-				return input, err // seems like this could be confusing
-			}
-			volumes[i] = volume
+		for i, conf := range volumeConfigs {
+			volume := makeEcsVolume(conf.(map[string]interface{}))
+			volumes[i] = &volume
 		}
 		// input.RequiresCompatibilities = requiredCompats
 		input = input.SetVolumes(volumes)
@@ -129,63 +129,35 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 	return input, input.Validate()
 }
 
-// TODO: Or I could just use ecs.Volume and ecs.DockerVolumeConfiguration...
-// That gets annoying with the []*string though for Labels and DriverOpts
-// the json marshall/unmarshall is less code to look at
-type dockerVolumeConfig struct {
-	Labels []string
-	Scope string
-	Driver string
-}
-
-type volume struct {
-	Name string
-	DockerVolumeConfiguration dockerVolumeConfig
-}
-/* newEcsVolume retuns a *ecs.Volume from ecscmd volume configuration data */
-func makeEcsVolume(volumeConfig map[string]interface{}) (*ecs.Volume, error) {
+/*
+ * newEcsVolume retuns a *ecs.Volume from the slightly flatter ecscmd volume configuration data
+ * see https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#DockerVolumeConfiguration
+ * and https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#Volume
+ */
+func makeEcsVolume(volumeConfig map[string]interface{}) ecs.Volume {
+	// TODO: Support HostVolumeProperties on the ecs.Volume
+	// TODO: Support DriverOpts on the DockerVolumeConfiguration, autoprovision
 	// TODO: really need to make a proper struct for all this I think and unmarshal from koanf to that
-	// rather than all this mucking around with map[string]interface{}
-	// Can I just do this?
 
-	// TODO: this is not quite right, need to shuffle some of this about to
-	// {
-  //     "name": "a_name",
-  //     "host": null,
-  //     "dockerVolumeConfiguration": {
-  //         "autoprovision": null,
-  //         "labels": null,
-  //         "scope": "task",
-  //         "driver": "local",
-  //         "driverOpts": null
-  //     }
-  // }
-
-	// todo: struct for this?
-	// docker_volume_config := map[string]interface{}{"labels": volumeConfig["labels"], "scope": volumeConfig["scope"], "driver": volumeConfig["driver"]}
-	dvc := dockerVolumeConfig{Labels: volumeConfig["labels"].([]string), Scope: volumeConfig["scope"].(string), Driver: volumeConfig["driver"].(string)}
-	vol := volume{Name: volumeConfig["name"].(string), DockerVolumeConfiguration: dvc}
-	configJson, err := json.Marshal(vol)
-	if err != nil {
-		return nil, err
+	scope, _ := volumeConfig["scope"].(string)
+	driver, _ := volumeConfig["driver"].(string)
+	name := volumeConfig["name"].(string)
+	dvc := ecs.DockerVolumeConfiguration{Scope: &scope, Driver: &driver}
+	v := ecs.Volume{Name: &name, DockerVolumeConfiguration: &dvc}
+	// cannot assert to map[string]string ? unsure why not.
+	// l, ok := volumeConfig["labels"].(map[string]string)
+	l, _ := volumeConfig["labels"].(map[string]interface{}) // ensuring we have a list to iterate over here
+	if len(l) > 0 {
+		// the if is mostly to avoid the call to SetLabels
+		labels := make(map[string]*string, len(l))
+		for k, v := range l {
+				label := v.(string)
+				// label := v // if I could just assert to map[string]string
+				labels[k] = &label
+		}
+		v.DockerVolumeConfiguration.SetLabels(labels)
 	}
-	var volume *ecs.Volume
-	err = json.Unmarshal(configJson, volume)
-	return volume, err
-
-
-	// v := ecs.Volume{Name: volumeConfig["name"], Driver: volumeConfig["driver"], Scope: volumeConfig["scope"]}
-	// if l, ok := volumeConfig["labels"]; ok {
-	// 	ll := l.([]string)
-	// 	labels := make([]*string, len(ll))
-	// 	for i := range ll {
-	// 		label := ll[i].(string)
-	// 		labels[i] = &label
-	// 	}
-	// }
-	// // TODO: DriverOpts... really starting to wonder if this should just be handled via json, even if it's just
-	// // json in the toml as a string...
-	// return v
+	return v
 }
 
 func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
