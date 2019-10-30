@@ -13,6 +13,20 @@ taskRoleArn = "arn:aws:iam::12345678:role/myTaskRole"
 ContainerName = "nginx"
 Image = "nginx:latest"
 AwsLogsGroup = "/test"
+[[taskdef.volumes]]
+name = "myvolume"
+# This parameter maps to Driver in the Create a volume (https://docs.docker.com/engine/api/v1.35/#operation/VolumeCreate)
+driver = "local"
+scope = "task" # task or shared
+# labels = ["foo", "bar"]
+# autoprovision only used if scope is shared
+# autoprovision = true
+# host is for bindmount - so not going to work with Fargate
+# host = "ahost"
+# A map of Docker driver-specific options passed through. This parameter maps
+# to DriverOpts in the Create a volume (https://docs.docker.com/engine/api/v1.35/#operation/VolumeCreate)
+# [taskdef.volumes.driveropts]
+
 
 # if updating an existing task, fewer options need to be set. AWS will default them to
 # that of the previous version of the task definition

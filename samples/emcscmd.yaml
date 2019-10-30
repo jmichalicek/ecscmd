@@ -1,0 +1,58 @@
+# This would normally be ~/.ecscmd.yaml
+# If creating a new task, we need to set more values. They can stay set or be removed
+SECURITY_GROUPS: &SECURITY_GROUPS
+  - "sg-mysecuritygroup1"
+  - "sg-mysecuritygroup2"]
+SUBNETS: &SUBNETS
+  - "subnet-mysubnet1"
+TASK_DEFAULTS: &TASK_DEFAULTS
+  profile: my_aws_profile
+  executionRoleArn: "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
+  requiresCompatibilities:
+    - FARGATE
+  # Security groups and subnets need specified for running a Fargate task
+  securityGroups:
+    *SECURITY_GROUPS
+  subnets:
+    *SUBNETS
+
+taskdef:
+  newTask:
+    <<: *TASK_DEFAULTS
+    family: testTaskDef
+    cpu: "256"
+    memory: "512"
+    template: "samples/containerDefinitions.json"
+    taskRoleArn: "arn:aws:iam::12345678:role/myTaskRole"
+    templatevars:
+      ContainerName: "nginx"
+      Image: "nginx:latest"
+      AwsLogsGroup: "/test"
+    volumes:
+      - name: muyvolume
+        driver: local
+        scope: task
+        labels:
+          label_key: label_val
+  existingTask:
+    # if updating an existing task, fewer options need to be set. AWS will default them to
+    # that of the previous version of the task definition
+    <<: *TASK_DEFAULTS
+    family: "testTaskDef"
+    template: "samples/containerDefinitions.json"
+    templatevars:
+      ContainerName: "nginx"
+      Image: "nginx:latest"
+      AwsLogsGroup: "/test"
+
+service:
+  sample:
+    profile: my_aws_profile
+    name: "testFargateService"
+    cluster: "testEcsCluster"
+    taskDefinition: "testTaskDef" # will also be a command line option - that is potentially more frequently desired
+    assignPublicIp: DISABLED
+    securityGroups:
+      *SECURITY_GROUPS
+    subnets:
+      *SUBNETS

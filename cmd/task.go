@@ -107,18 +107,6 @@ var cmdRegisterTaskDef = &cobra.Command{
 			return err
 		}
 
-		// TODO: this is a hack.  optional volumes. This is a bit of a hack for now.
-		// should probably make a volumes section i the .toml
-		if _, ok := taskDefConfig["volumetemplate"]; ok {
-			volumeBytes, err := taskdef.ParseVolumeDefTemplate(taskDefConfig)
-			if err != nil {
-				return err
-			}
-			vdef, err := taskdef.MakeVolumesDefinitions(volumeBytes)
-			i = i.SetVolumes(vdef)
-		}
-
-
 		session, err := session.NewAwsSession(taskDefConfig)
 		if err != nil {
 			return err

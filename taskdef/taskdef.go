@@ -111,8 +111,53 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 		input = input.SetTaskRoleArn(val.(string))
 	}
 
+	if vols, ok := config["volumes"]; ok {
+		// not []map[string]string because the labels key is a list and driveropts is another map
+		// TODO: if I have koanf just deserialize to a struct, can I have it just deserialize to
+		// the aws-sdk-go types or do I need my own struct in the middle?
+		volumeConfigs := vols.([]interface{})
+		volumes := make([]*ecs.Volume, len(volumeConfigs))
+		for i, conf := range volumeConfigs {
+			volume := makeEcsVolume(conf.(map[string]interface{}))
+			volumes[i] = &volume
+		}
+		// input.RequiresCompatibilities = requiredCompats
+		input = input.SetVolumes(volumes)
+	}
+
 	// fmt.Printf("\n\nINPUT: %v\n\n", input)
 	return input, input.Validate()
+}
+
+/*
+ * newEcsVolume retuns a *ecs.Volume from the slightly flatter ecscmd volume configuration data
+ * see https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#DockerVolumeConfiguration
+ * and https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#Volume
+ */
+func makeEcsVolume(volumeConfig map[string]interface{}) ecs.Volume {
+	// TODO: Support HostVolumeProperties on the ecs.Volume
+	// TODO: Support DriverOpts on the DockerVolumeConfiguration, autoprovision
+	// TODO: really need to make a proper struct for all this I think and unmarshal from koanf to that
+
+	scope, _ := volumeConfig["scope"].(string)
+	driver, _ := volumeConfig["driver"].(string)
+	name := volumeConfig["name"].(string)
+	dvc := ecs.DockerVolumeConfiguration{Scope: &scope, Driver: &driver}
+	v := ecs.Volume{Name: &name, DockerVolumeConfiguration: &dvc}
+	// cannot assert to map[string]string ? unsure why not.
+	// l, ok := volumeConfig["labels"].(map[string]string)
+	l, _ := volumeConfig["labels"].(map[string]interface{}) // ensuring we have a list to iterate over here
+	if len(l) > 0 {
+		// the if is mostly to avoid the call to SetLabels
+		labels := make(map[string]*string, len(l))
+		for k, v := range l {
+				label := v.(string)
+				// label := v // if I could just assert to map[string]string
+				labels[k] = &label
+		}
+		v.DockerVolumeConfiguration.SetLabels(labels)
+	}
+	return v
 }
 
 func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {

@@ -18,7 +18,8 @@ package cmd
 import (
 	"fmt"
 	"github.com/knadh/koanf"
-	"github.com/knadh/koanf/parsers/toml"
+	// "github.com/knadh/koanf/parsers/toml"
+	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	homedir "github.com/mitchellh/go-homedir"
@@ -71,7 +72,7 @@ func init() {
 	// https://www.netlify.com/blog/2016/09/06/creating-a-microservice-boilerplate-in-go/ but with all
 	// the subcommands, etc?
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.toml)")
+	rootCmd.PersistentFlags().StringVar(&baseConfig.configFile, "config", "", "config file (default is $HOME/.ecscmd.yaml)")
 	// TODO: Make this per command just to provide more specific help/description for how it affects that command?
 	rootCmd.PersistentFlags().BoolVar(&baseConfig.dryRun, "dry-run", false, "Perform dry-run. Does not actually send command. Output info about what would have been performed.")
 	// rootCmd.PersistentFlags().StringVar(rconf.AwsProfile, "profile", "", "profile to use from ~/.aws/config and ~/.aws/credentials")
@@ -88,24 +89,26 @@ func initConfig() {
 	// TODO: other config file formats, custom config file path from command line
 	if baseConfig.configFile != "" {
 		if canUseFile(baseConfig.configFile) {
-			k.Load(file.Provider(baseConfig.configFile), toml.Parser())
+			if err := k.Load(file.Provider(baseConfig.configFile), yaml.Parser()); err != nil {
+				exitWithError(fmt.Errorf("Could not parse config file.\n%s", err.Error()))
+			}
 		} else {
 			exitWithError(fmt.Errorf("Cannot load specified config file: %s", baseConfig.configFile))
 		}
 	} else {
-		// TODO: which should take precedence? ~/.ecscmd.toml FIRST to load defaults and then override project specific
-		// or local dir first (as is now) to provide general, in code repo default, and let user override with ~/.ecscmd.toml
+		// TODO: which should take precedence? ~/.ecscmd.yaml FIRST to load defaults and then override project specific
+		// or local dir first (as is now) to provide general, in code repo default, and let user override with ~/.ecscmd.yaml
 		// TODO: load other config file formats... .yml, etc.
 		// TODO: may switch to yaml by default (or only) - I like it better for the config structure ecscmd needs.
-		// TODO: for configs -- allow multiple --config="foo.toml" and parse in order, later ones overriding earlier ones?
-		projectConfig := path.Join(".", ".ecscmd.toml")
+		// TODO: for configs -- allow multiple --config="foo.yaml" and parse in order, later ones overriding earlier ones?
+		projectConfig := path.Join(".", ".ecscmd.yaml")
 		if canUseFile(projectConfig) {
-			k.Load(file.Provider(projectConfig), toml.Parser())
+			k.Load(file.Provider(projectConfig), yaml.Parser())
 		}
 
-		defaultConfig := path.Join(home, ".ecscmd.toml")
+		defaultConfig := path.Join(home, ".ecscmd.yaml")
 		if canUseFile(defaultConfig) {
-			k.Load(file.Provider(defaultConfig), toml.Parser())
+			k.Load(file.Provider(defaultConfig), yaml.Parser())
 		}
 	}
 
