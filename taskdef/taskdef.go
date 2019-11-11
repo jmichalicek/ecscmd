@@ -20,7 +20,7 @@ const EC2 = "EC2"
 // the aws packages have structs for task defs, etc.
 func ParseContainerDefTemplate(config map[string]interface{}) ([]byte, error) {
 	templateFile := config["container_template"].(string)
-	templateVars := config["templatevars"]
+	templateVars := config["template_vars"]
 	t := template.Must(template.ParseFiles(templateFile))
 
 	var tpl bytes.Buffer

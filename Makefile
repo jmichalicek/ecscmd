@@ -1,5 +1,5 @@
 
-build: build-linux-x64 build-osx-x64
+build: build-linux-amd64 build-osx-amd64
 
 build-linux-amd64:
 	GOOS=linux GOARCH=amd64 go build -o .build/linux-amd64/ecscmd .

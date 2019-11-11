@@ -24,7 +24,7 @@ taskdef:
     memory: "512"
     container_template: "samples/containerDefinitions.json"
     task_role_arn: "arn:aws:iam::12345678:role/myTaskRole"
-    templatevars:
+    template_vars:
       ContainerName: "nginx"
       Image: "nginx:latest"
       AwsLogsGroup: "/test"
@@ -40,7 +40,7 @@ taskdef:
     <<: *TASK_DEFAULTS
     family: "testTaskDef"
     container_template: "samples/containerDefinitions.json"
-    templatevars:
+    template_vars:
       ContainerName: "nginx"
       Image: "nginx:latest"
       AwsLogsGroup: "/test"

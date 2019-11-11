@@ -17,10 +17,10 @@ There are already a few tools aimed at this, but none quite fit my primary requi
 ## Usage
 The first `<name>` is the name of the section in your config file. Not all flags are yet documented here, just examples. The config section name may become optional and possibly a flag using `--some-flag` so that you can run without having a section in your config.
 ```
-ecscmd task register <name> [--config=~/.ecscmd.toml]
-ecscmd task run <name> [--stream-output --config=~/.ecscmd.toml]
-ecscmd service update <name> [--task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
-ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
+ecscmd task register <name> [--config=~/.ecscmd.yaml]
+ecscmd task run <name> [--stream-output --config=~/.ecscmd.yaml]
+ecscmd service update <name> [--task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.yaml]
+ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.yaml]
 ```
 
 ### Docker

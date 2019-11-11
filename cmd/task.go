@@ -89,7 +89,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		}
 		taskDefConfig := k.Cut(configKey).Raw()
 		// Get a correctly typed template variables so that it can be accessed via index and updated
-		var tvars map[string]interface{} = taskDefConfig["templatevars"].(map[string]interface{})
+		var tvars map[string]interface{} = taskDefConfig["template_vars"].(map[string]interface{})
 		for _, tvar := range registerTaskOptions.TemplateVars {
 			// very naive, but should work for 99% of cases... a key with an = in it would be weird
 			s := strings.SplitN(tvar, "=", 2)
