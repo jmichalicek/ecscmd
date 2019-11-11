@@ -1,0 +1,8 @@
+FROM alpine:3.7
+LABEL maintainer="Justin Michalicek <jmichalicek@gmail.com>"
+# TODO: this does not guarantee a correct version...
+COPY .build/linux-amd64/ecscmd /bin/ecscmd
+RUN chmod a+x /bin/ecscmd && mkdir /ecscmd
+WORKDIR /ecscmd
+ENTRYPOINT ["/bin/ecscmd"]
+CMD ["--help"]

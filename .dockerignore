@@ -1,0 +1,13 @@
+cmd
+network_configuration
+samples
+service
+session
+taskdef
+go.mod
+go.sum
+*.go
+README.md
+Makefile
+.build
+!.build/linux-amd64/ecscmd

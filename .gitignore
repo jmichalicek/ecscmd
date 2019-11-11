@@ -1,3 +1,4 @@
 vendor
 ecscmd
 .DS_Store
+.build

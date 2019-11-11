@@ -23,6 +23,13 @@ ecscmd service update <name> [--task-definition=mytaskdefinition:1 --force-deplo
 ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinition:1 --force-deployment --config=~/.ecscmd.toml]
 ```
 
+### Docker
+
+```
+docker pull jmichalicek/ecscmd:alpine`
+docker run -v .:/ecscmd jmichalicek/ecscmd:alpine task update mytaskdef --config /ecscmd/.ecscmd.yaml`
+```
+
 ## AWS Config
 * Ensure task execution role is set up - https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html
 * registering a new task def requires more settings configured than just updating an existing task def.
