@@ -7,11 +7,11 @@ import (
 func NewNetworkConfiguration(config map[string]interface{}) (ecs.NetworkConfiguration, error) {
 	awsVpcConfig := &ecs.AwsVpcConfiguration{}
 	// Supported for fargate, not for ec2 launch type
-	if assignPublicIp, ok := config["assignPublicIp"]; ok {
+	if assignPublicIp, ok := config["assign_public_ip"]; ok {
 		awsVpcConfig = awsVpcConfig.SetAssignPublicIp(assignPublicIp.(string))
 	}
 
-	if securityGroupIds, ok := config["securityGroups"]; ok {
+	if securityGroupIds, ok := config["security_groups"]; ok {
 		g := securityGroupIds.([]interface{})
 		securityGroups := make([]*string, len(g))
 		for i := range g {

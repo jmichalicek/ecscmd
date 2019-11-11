@@ -19,7 +19,7 @@ const EC2 = "EC2"
 // super lazy here on what will get returned for now. Should possibly return a proper object.
 // the aws packages have structs for task defs, etc.
 func ParseContainerDefTemplate(config map[string]interface{}) ([]byte, error) {
-	templateFile := config["template"].(string)
+	templateFile := config["container_template"].(string)
 	templateVars := config["templatevars"]
 	t := template.Must(template.ParseFiles(templateFile))
 
@@ -40,28 +40,6 @@ func MakeContainerDefinitions(containerDefs []byte) ([]*ecs.ContainerDefinition,
 	return cdefs, err
 }
 
-// TODO the volumes stuff here is a hack to get stuff done at the moment. Not sure another template is really a good way to go.
-// probably want volumes config in the toml
-func ParseVolumeDefTemplate(config map[string]interface{}) ([]byte, error) {
-	templateFile := config["volumetemplate"].(string)
-	templateVars := config["templatevars"]
-	t := template.Must(template.ParseFiles(templateFile))
-
-	var tpl bytes.Buffer
-	if err := t.Execute(&tpl, templateVars); err != nil {
-		return tpl.Bytes(), err
-	}
-	result := tpl.Bytes()
-	return result, nil
-}
-
-func MakeVolumesDefinitions(volumeDefs []byte) ([]*ecs.Volume, error) {
-	// TODO: is this useful or should this just be what ParseContainerDefTemplate() does?
-	var defs []*ecs.Volume
-	err := json.Unmarshal(volumeDefs, &defs)
-	return defs, err
-}
-
 /*
  * Takes the dict for config for a taskdefinition + a slice of *ecs.ContainerDefinition to build
  * the ecs.TaskDefinitionInput.
@@ -73,7 +51,7 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 	family := config["family"].(string)
 	input := &ecs.RegisterTaskDefinitionInput{ContainerDefinitions: containerDefs, Family: &family}
 
-	if compats, ok := config["requiresCompatibilities"]; ok {
+	if compats, ok := config["requires_compatibilities"]; ok {
 		cl := compats.([]interface{})
 		requiredCompats := make([]*string, len(cl))
 		for i := range cl {
@@ -96,17 +74,17 @@ func NewTaskDefinitionInput(config map[string]interface{}, containerDefs []*ecs.
 		// Fargate requires awsvpc network mode
 		input = input.SetNetworkMode("awsvpc")
 	} else {
-		if val, ok := config["networkMode"]; ok {
+		if val, ok := config["network_mode"]; ok {
 			input = input.SetNetworkMode(val.(string))
 		}
 	}
 
-	if val, ok := config["executionRoleArn"]; ok {
+	if val, ok := config["execution_role_arn"]; ok {
 		// required for Fargate
 		input = input.SetExecutionRoleArn(val.(string))
 	}
 
-	if val, ok := config["taskRoleArn"]; ok {
+	if val, ok := config["task_role_arn"]; ok {
 		// The taskRole so that you do not have to pass aws creds around
 		input = input.SetTaskRoleArn(val.(string))
 	}
@@ -191,14 +169,13 @@ func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
 	}
 	// Not sure I care for this. the config read in will have family, which is what we want to run
 	// but if user specifies more specifically on the command line such as to run a specific revision,
-	// then that's no good - that is where
-	// a separate args struct becomes good
-	// taskDefinition := config["taskDefinition"].(string)
+	// then this becomes misleading/unclear - that is where a separate args struct becomes good
+	// probably need a gracefully falling back chain - of arn, family:revision, family somehow specifiable
 	if taskDefinition, ok := config["family"]; ok {
 		input.SetTaskDefinition(taskDefinition.(string))
 	}
 
-	if launchType, ok := config["launchType"]; ok {
+	if launchType, ok := config["launch_type"]; ok {
 		input.SetLaunchType(launchType.(string))
 	}
 

@@ -53,9 +53,9 @@ type registerTaskDefCommandOptions struct {
 	TemplateVars            []string // can be used to set template vars which are not in the koanf settings or to override them
 	Family                  string
 	RequiresCompatibilities []string
-	cpu                     int64
-	memory                  int64
-	template                string
+	Cpu                     int64
+	Memory                  int64
+	ContainerTemplate       string
 }
 
 var registerTaskOptions registerTaskDefCommandOptions = registerTaskDefCommandOptions{}
@@ -155,7 +155,7 @@ var cmdRunTask = &cobra.Command{
 			config["family"] = runTaskOptions.TaskDefinition
 		}
 
-		config["launchType"] = taskdef.FARGATE
+		config["launch_type"] = taskdef.FARGATE
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
 		client := ecs.New(session)
@@ -171,6 +171,7 @@ var cmdRunTask = &cobra.Command{
 			return err
 		}
 		// TODO: assuming a single container task. Handle multi-container later... fancier logging, specify the container, etc.
+		// TODO: make a function to get this info - or a receiver on an also to-be-developed Task or TaskDefinition struct.
 		logConfig := descTaskDef.TaskDefinition.ContainerDefinitions[0].LogConfiguration.Options
 		containerName := descTaskDef.TaskDefinition.ContainerDefinitions[0].Name
 		logGroup := logConfig["awslogs-group"]
@@ -351,6 +352,7 @@ func streamCloudwatchLogs(client *cloudwatchlogs.CloudWatchLogs, logGroup string
 			//			 Probably abstract into my own struct with a PrettyPrint() receiver
 			// TODO: return this data + more over a channel rather than printing here so that receiver
 			// can do whatever with it
+			// TODO: get the container name and include that
 			fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp/1000, 0).In(time.UTC), *event.Message)
 		}
 		logEventsInput.NextToken = output.NextForwardToken
@@ -358,7 +360,7 @@ func streamCloudwatchLogs(client *cloudwatchlogs.CloudWatchLogs, logGroup string
 		// check to see if the task has completed so we can exit or sleep before the next api call
 		select {
 		case <-done:
-				return
+			return
 		default:
 			// TODO: configurable sleep time?
 			time.Sleep(time.Second * 3) // Randomly selected sleep time

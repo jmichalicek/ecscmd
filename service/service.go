@@ -24,7 +24,7 @@ func NewUpdateServiceInput(config map[string]interface{}) (*ecs.UpdateServiceInp
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#UpdateServiceInput
 	input := &ecs.UpdateServiceInput{Service: serviceName}
 
-	if taskDef, ok := config["taskDefinition"]; ok {
+	if taskDef, ok := config["task_definition"]; ok {
 		input = input.SetTaskDefinition(taskDef.(string)) // seems to be not required - perhaps can update things without changing the task def.
 	}
 
@@ -32,13 +32,13 @@ func NewUpdateServiceInput(config map[string]interface{}) (*ecs.UpdateServiceInp
 		input = input.SetCluster(cluster.(string))
 	}
 
-	if desiredCount, ok := config["desiredCount"]; ok {
+	if desiredCount, ok := config["desired_count"]; ok {
 		input = input.SetDesiredCount(desiredCount.(int64))
 	}
 
 	// TODO: Unsure if this should come in on config or be passed in as a standalone arg. It feels like a standlone arg
 	// and command line only flag rather than config file thing.
-	if forceDeployment, ok := config["forceDeployment"]; ok {
+	if forceDeployment, ok := config["force_deployment"]; ok {
 		if forceDeployment.(bool) {
 			input = input.SetForceNewDeployment(true)
 		}
@@ -71,7 +71,7 @@ func NewCreateServiceInput(config map[string]interface{}) (*ecs.CreateServiceInp
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#UpdateServiceInput
 	input := &ecs.CreateServiceInput{ServiceName: serviceName}
 
-	if taskDef, ok := config["taskDefinition"]; ok {
+	if taskDef, ok := config["task_definition"]; ok {
 		input = input.SetTaskDefinition(taskDef.(string)) // seems to be not required - perhaps can update things without changing the task def.
 	}
 
@@ -79,16 +79,16 @@ func NewCreateServiceInput(config map[string]interface{}) (*ecs.CreateServiceInp
 		input = input.SetCluster(cluster.(string))
 	}
 
-	if desiredCount, ok := config["desiredCount"]; ok {
+	if desiredCount, ok := config["desired_count"]; ok {
 		input = input.SetDesiredCount(desiredCount.(int64))
 	}
 
-	if launchType, ok := config["launchType"]; ok {
+	if launchType, ok := config["launch_type"]; ok {
 		input = input.SetLaunchType(launchType.(string))
 	}
 
 	deploymentController := &ecs.DeploymentController{}
-	if dc, ok := config["deploymentController"]; ok {
+	if dc, ok := config["deployment_controller"]; ok {
 		deploymentController = deploymentController.SetType(dc.(string))
 	} else {
 		deploymentController = deploymentController.SetType("ECS")
@@ -97,11 +97,11 @@ func NewCreateServiceInput(config map[string]interface{}) (*ecs.CreateServiceInp
 
 	awsVpcConfig := &ecs.AwsVpcConfiguration{}
 	// Supported for fargate, not for ec2 launch type
-	if assignPublicIp, ok := config["assignPublicIp"]; ok {
+	if assignPublicIp, ok := config["assign_public_ip"]; ok {
 		awsVpcConfig = awsVpcConfig.SetAssignPublicIp(assignPublicIp.(string))
 	}
 
-	if securityGroupIds, ok := config["securityGroups"]; ok {
+	if securityGroupIds, ok := config["security_groups"]; ok {
 		g := securityGroupIds.([]interface{})
 		securityGroups := make([]*string, len(g))
 		for i := range g {
