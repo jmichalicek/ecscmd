@@ -189,7 +189,7 @@ var cmdRunTask = &cobra.Command{
 		// function which takes that interface - then could call mything.DryRun()
 		// or MyConfig.Execute() and those could return a standard interface and errors
 		// and then the if err != nil stuff could live
- 		// in one place instead of every Run function
+		// in one place instead of every Run function
 		// Unsure how to abstract stuff like waiting on a waiter, though.
 		if baseConfig.dryRun {
 			// TODO: better output here - really should try to look up the task def on aws
@@ -197,118 +197,72 @@ var cmdRunTask = &cobra.Command{
 			return nil
 		}
 
-		result, err := client.RunTask(&runTaskInput)
+		runTaskResponse, err := client.RunTask(&runTaskInput)
 		// result, err := taskdef.RegisterTaskDefinition(i, client)
 		if err != nil {
 			return err
 		}
 
 		if runTaskOptions.WaitForComplete || runTaskOptions.StreamOutput {
-			taskCompleteChannel := make(chan bool)
-			// TODO may want this to take a struct with true/false and an error or just take an error
-			// then the goroutines can return the error, if any, or nil, and code can exit or whatever from there.
-
+			// TODO: could be interesting to do this with waitgroup rather than status channels
+			// to know when to move on, stop the cloudwatch goroutine, etc.
+			taskStatusChannel := make(chan RunTaskResult)
 			// TODO: not actually making use of cloudWatchChannel right now. A better use would be
 			// to return an object with the cloudwatch info from it, allowing streamCloudwatchLogs() to be more generic
 			// and whatever uses it to print that data or otherwise as needed.
 			cloudWatchChannel := make(chan string)
-			taskArn := result.Tasks[0].TaskArn
-			describeTaskInput := &ecs.DescribeTasksInput{
-				Cluster: runTaskInput.Cluster,
-				Tasks:   []*string{taskArn},
-			}
-			// TODO: I feel like these should be their own functions, not nested here.
-			go func() {
-				if err := client.WaitUntilTasksRunning(describeTaskInput); err != nil {
-					fmt.Println(err.Error())
-					taskCompleteChannel <- false
-					return
-				}
-
-				fmt.Println("Task Started")
-				// stopping via the web console doesn't seem to cause this waiter to stop.
-				if err := client.WaitUntilTasksStopped(describeTaskInput); err != nil {
-					// I have actually seen these waiters take longer than the timeout but the thing actually work
-					// but it's rare
-					fmt.Println(err.Error())
-					taskCompleteChannel <- false
-					return
-				}
-				fmt.Println("Task complete!")
-				taskCompleteChannel <- true
-			}()
-
-			streamCloudwatchLogs := func() {
-				taskArn := result.Tasks[0].TaskArn
-				parts := strings.Split(*taskArn, "/")
-				// seems this can vary or has changed when I updated the sdk version...
-				// taskId := parts[2]
-				taskId := parts[len(parts)-1]
-				cwclient := cloudwatchlogs.New(session)
-				logStreamName = logStreamName + taskId
-				logEventsInput := &cloudwatchlogs.GetLogEventsInput{}
-				logEventsInput.SetStartFromHead(true)
-				logEventsInput.SetLimit(10)
-				logEventsInput.SetLogGroupName(*logGroup)
-				logEventsInput.SetLogStreamName(logStreamName)
-				// should maybe wait for task to start using a channel for that!
-
-				for {
-					output, _ := cwclient.GetLogEvents(logEventsInput)
-					// TODO: actually do something with the error but many of these errors are just temporary while waiting
-					for _, event := range output.Events {
-						// event.Timetstamp is unix epoch MILLISECONDS
-						// TODO: allow structured output - convert the whole event to json and dump it
-						// TODO: allow timestamp in desired timezone
-						// TODO: abstract this elsewhere - will need reused for a general stream task logs command
-						//       and have cloudWatchChannel allow the message to be passed back - maybe just the message
-						//			 and do the rest of the formatting elsewhere? or pass back the formatted message?
-						//			 Probably abstract into my own struct with a PrettyPrint() receiver
-						fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp/1000, 0).In(time.UTC), *event.Message)
-					}
-					logEventsInput.NextToken = output.NextForwardToken
-
-					// check to see if the task has completed so we can exit or sleep before the next api call
-					select {
-					case <-taskCompleteChannel:
-						return
-					default:
-						// TODO: configurable sleep time?
-						time.Sleep(time.Second * 3) // Randomly selected sleep time
-					}
-
-				}
-			}
+			// need a separate channel for cloudwatch goroutine to know when to quit
+			// rather than having both the main loop and the cloudwatch goroutine listen on the same channel. In the latter
+			// case, only one will actually get the message to stop and things go wonky
+			cloudWatchDoneChan := make(chan bool)
+			taskArn := runTaskResponse.Tasks[0].TaskArn
+			taskStatus := TaskPending
+			go WaitForTask(client, *runTaskInput.Cluster, *taskArn, taskStatusChannel)
 
 			if runTaskOptions.StreamOutput {
-				go streamCloudwatchLogs()
+				// TODO: abstract this into a function somewhere
+				taskArn := runTaskResponse.Tasks[0].TaskArn
+				parts := strings.Split(*taskArn, "/")
+				taskId := parts[len(parts)-1]
+				go streamCloudwatchLogs(cloudwatchlogs.New(session), *logGroup, logStreamName+taskId, cloudWatchDoneChan)
 			}
 
 			done := false
+			// kludge because the goroutine sends the pending status
+			// before this is listening for it
+			fmt.Printf("Waiting for task")
 			for {
 				select {
 				case s := <-cloudWatchChannel:
 					fmt.Printf("%s", s)
-				case s := <-taskCompleteChannel:
-					// Relying on the waiter function to print the errors. Not so sure that's a great idea long term.
-					// thinking maybe two channels... taskErrors, taskOutput which would keep all output here.
-					if !s {
-						//  TODO: not really nil, but we already printed the error - see comment on next line
-						return nil // again, if taskCompleteChannel was returning an error this would be better
+				case s := <-taskStatusChannel:
+					if s.Error != nil {
+						// TODO: Do I really want to always exit now? For now, go with yes.
+						return s.Error
 					}
-					done = true
+					taskStatus = s.Status
+					switch s.Status {
+					case TaskStopped:
+						done = true
+						cloudWatchDoneChan <- done
+					case TaskRunning:
+						// TODO: differentiate between "still running" and "just started"?
+						fmt.Println("Task started")
+					}
 				default:
-					if !runTaskOptions.StreamOutput {
-						// TODO: print dots UNTIL it is running if we are streaming output?
+					// If waiting for task without streaming logs or if output will be streamed, but the task has not
+					// started show "working" dots
+					if !runTaskOptions.StreamOutput || taskStatus == TaskPending {
 						fmt.Printf(".")
 						time.Sleep(time.Second)
 					}
 				}
 				if done {
+					fmt.Println("")
 					break
 				}
 			}
-			close(taskCompleteChannel)
+			close(taskStatusChannel)
 			close(cloudWatchChannel)
 		}
 		return nil
@@ -328,4 +282,87 @@ func init() {
 	cmdRunTask.Flags().Int64Var(&runTaskOptions.Count, "count", 1, "How many of this task to run.")
 	cmdRunTask.Flags().BoolVar(&runTaskOptions.WaitForComplete, "wait-for-stop", false, "Wait for the task to complete before continuing.")
 	cmdRunTask.Flags().BoolVar(&runTaskOptions.StreamOutput, "stream-logs", false, "Stream cloudwatch logs for the task.")
+}
+
+// TODO: Move everything below here to the taskdef and a new cloudwatch package or to a central
+// main ecscmd package.
+type TaskStatus int
+
+/* AWS has more statuses than this */
+const (
+	TaskPending TaskStatus = iota
+	TaskRunning
+	TaskStopped
+)
+
+/* include more data about the task? */
+// Not sure Result is really correct/accurate here.
+// This type is for communicating current status and any errors across the channel
+type RunTaskResult struct {
+	Error  error
+	Status TaskStatus
+}
+
+// WaitForTask uses the passed in *ecs.ECS client to wait for the task specified by taskArn on cluster to stop.
+// The current task status at each change and any error are returned in the taskStatusChannel.
+//
+// I suspect this function currently has a race condition where if the task is already
+// running (as opposed to pending or provisioning) or possibly only already stopped and may get hung up
+// or may return an error..
+func WaitForTask(client *ecs.ECS, cluster string, taskArn string, taskStatusChannel chan<- RunTaskResult) {
+	describeTaskInput := &ecs.DescribeTasksInput{
+		Cluster: &cluster,
+		Tasks:   []*string{&taskArn},
+	}
+
+	taskStatusChannel <- RunTaskResult{Error: nil, Status: TaskPending}
+	if err := client.WaitUntilTasksRunning(describeTaskInput); err != nil {
+		fmt.Println(err.Error())
+		// TODO: Is it really definitely stopped yet?
+		taskStatusChannel <- RunTaskResult{Error: err, Status: TaskStopped}
+		return
+	}
+	taskStatusChannel <- RunTaskResult{Error: nil, Status: TaskRunning}
+	// I have seen these just take longer than the allowed timeout on the waiter and needed to wait in a loop
+	err := client.WaitUntilTasksStopped(describeTaskInput)
+	taskStatusChannel <- RunTaskResult{Error: err, Status: TaskStopped}
+	return
+}
+
+func streamCloudwatchLogs(client *cloudwatchlogs.CloudWatchLogs, logGroup string, logStreamName string, done <-chan bool) {
+	// TODO: this runs as a goroutine... does it NEED the done chan? It will just exit when the main program loop
+	// exits anyway with the current use case. It does give a way to ensure it stops if I want to stop it early, though.
+	logEventsInput := &cloudwatchlogs.GetLogEventsInput{}
+	logEventsInput.SetStartFromHead(true)
+	logEventsInput.SetLimit(10)
+	logEventsInput.SetLogGroupName(logGroup)
+	logEventsInput.SetLogStreamName(logStreamName)
+
+	for {
+		output, _ := client.GetLogEvents(logEventsInput)
+		// TODO: actually do something with the error but many of these errors are just temporary while waiting
+		for _, event := range output.Events {
+			// event.Timetstamp is unix epoch MILLISECONDS
+			// TODO: allow structured output - convert the whole event to json and dump it
+			// TODO: allow timestamp in desired timezone
+			// TODO: abstract this elsewhere - will need reused for a general stream task logs command
+			//       and have cloudWatchChannel allow the message to be passed back - maybe just the message
+			//			 and do the rest of the formatting elsewhere? or pass back the formatted message?
+			//			 Probably abstract into my own struct with a PrettyPrint() receiver
+			// TODO: return this data + more over a channel rather than printing here so that receiver
+			// can do whatever with it
+			fmt.Printf("[%s] %s\n", time.Unix(*event.Timestamp/1000, 0).In(time.UTC), *event.Message)
+		}
+		logEventsInput.NextToken = output.NextForwardToken
+
+		// check to see if the task has completed so we can exit or sleep before the next api call
+		select {
+		case <-done:
+				return
+		default:
+			// TODO: configurable sleep time?
+			time.Sleep(time.Second * 3) // Randomly selected sleep time
+		}
+
+	}
 }
