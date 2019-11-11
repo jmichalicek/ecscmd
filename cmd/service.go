@@ -87,20 +87,22 @@ var createServiceCmd = &cobra.Command{
 		// with koanf for its better parsing of everything else seems to leave few options here and they all kind of suck.
 		// taking command line options here and using them to override settings from configs
 		if createServiceOptions.taskDefinition != "" {
-			serviceConfig["taskDefinition"] = createServiceOptions.taskDefinition
+			serviceConfig["task_definition"] = createServiceOptions.taskDefinition
 		}
 
 		if createServiceOptions.launchType != "" {
-			serviceConfig["launchType"] = createServiceOptions.launchType
+			serviceConfig["launch_type"] = createServiceOptions.launchType
 		}
 
-		_, ok := serviceConfig["desiredCount"]
+		_, ok := serviceConfig["desired_count"]
 		if !ok || cmd.Flags().Changed("desired-count") {
 			// user set the flag as opposed to being 0 by default
-			serviceConfig["desiredCount"] = createServiceOptions.desiredCount
+			serviceConfig["desired_count"] = createServiceOptions.desiredCount
 		} else {
-			// this is gross. koanf is reading the integer from toml as a float64
-			serviceConfig["desiredCount"] = int64(serviceConfig["desiredCount"].(float64))
+			// this is gross. koanf is reading the integer from toml as a float64.
+			// todo - test if this still happens with yaml. And again, a typed struct for reading these in
+			// would fix issues like that.
+			serviceConfig["desired_count"] = int64(serviceConfig["desired_count"].(float64))
 		}
 
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
@@ -154,22 +156,22 @@ var updateServiceCmd = &cobra.Command{
 		// with koanf for its better parsing of everything else seems to leave few options here and they all kind of suck.
 		// taking command line options here and using them to override settings from configs
 		if updateServiceOptions.taskDefinition != "" {
-			serviceConfig["taskDefinition"] = updateServiceOptions.taskDefinition
+			serviceConfig["task_definition"] = updateServiceOptions.taskDefinition
 		}
 
 		if updateServiceOptions.forceDeployment {
-			serviceConfig["forceDeployment"] = true
+			serviceConfig["force_deployment"] = true
 		}
 		if cmd.Flags().Changed("desired-count") {
 			fmt.Println("setting desired-count!!")
 			// user set the flag as opposed to being 0 by default
 			// TODO: replace cobra? forcing a default value makes things super unclear and clunky. The command help
 			// now shows a default of 0, but really default is to keep it as is...
-			serviceConfig["desiredCount"] = updateServiceOptions.desiredCount
+			serviceConfig["desired_count"] = updateServiceOptions.desiredCount
 		} else {
 			// this is gross. koanf is reading the integer from toml as a float64
-			if dc, ok := serviceConfig["desiredCount"]; ok {
-				serviceConfig["desiredCount"] = int64(dc.(float64))
+			if dc, ok := serviceConfig["desired_count"]; ok {
+				serviceConfig["desired_count"] = int64(dc.(float64))
 			}
 		}
 

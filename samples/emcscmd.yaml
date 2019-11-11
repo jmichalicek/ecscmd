@@ -7,11 +7,11 @@ SUBNETS: &SUBNETS
   - "subnet-mysubnet1"
 TASK_DEFAULTS: &TASK_DEFAULTS
   profile: my_aws_profile
-  executionRoleArn: "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
-  requiresCompatibilities:
+  execution_role_arn: "arn:aws:iam::12345678:role/ecsTaskExecutionRole"
+  requires_compatibilities:
     - FARGATE
   # Security groups and subnets need specified for running a Fargate task
-  securityGroups:
+  security_groups:
     *SECURITY_GROUPS
   subnets:
     *SUBNETS
@@ -22,8 +22,8 @@ taskdef:
     family: testTaskDef
     cpu: "256"
     memory: "512"
-    template: "samples/containerDefinitions.json"
-    taskRoleArn: "arn:aws:iam::12345678:role/myTaskRole"
+    container_template: "samples/containerDefinitions.json"
+    task_role_arn: "arn:aws:iam::12345678:role/myTaskRole"
     templatevars:
       ContainerName: "nginx"
       Image: "nginx:latest"
@@ -39,7 +39,7 @@ taskdef:
     # that of the previous version of the task definition
     <<: *TASK_DEFAULTS
     family: "testTaskDef"
-    template: "samples/containerDefinitions.json"
+    container_template: "samples/containerDefinitions.json"
     templatevars:
       ContainerName: "nginx"
       Image: "nginx:latest"
@@ -50,9 +50,10 @@ service:
     profile: my_aws_profile
     name: "testFargateService"
     cluster: "testEcsCluster"
-    taskDefinition: "testTaskDef" # will also be a command line option - that is potentially more frequently desired
-    assignPublicIp: DISABLED
-    securityGroups:
+    task_definition: "testTaskDef" # will also be a command line option - that is potentially more frequently desired
+    assign_public_ip: DISABLED
+    desired_count: 1
+    security_groups:
       *SECURITY_GROUPS
     subnets:
       *SUBNETS
