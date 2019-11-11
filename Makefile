@@ -9,9 +9,6 @@ build-osx-amd64:
 
 docker-alpine:
 	docker build -f Dockerfile.alpine -t jmichalicek/ecscmd:alpine .
-	docker tag jmichalicek/ecscmd:alpine jmichalicek/ecscmd:alpine-3.7
-	docker tag jmichalicek/ecscmd:alpine jmichalicek/ecscmd:alpine-latest
 
 push-docker-alpine:
 	docker push jmichalicek/ecscmd:alpine
-	docker push jmichalicek/ecscmd:alpine-3.7

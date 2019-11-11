@@ -27,8 +27,9 @@ ecscmd service create <name> [--name=myservice --task-definition=mytaskdefinitio
 
 ```
 docker pull jmichalicek/ecscmd:alpine`
-docker run -v .:/ecscmd jmichalicek/ecscmd:alpine task update mytaskdef --config /ecscmd/.ecscmd.yaml`
+docker run -v ~/.ecscmd.yaml:/ecscmd/.ecscmd.yaml -e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY jmichalicek/ecscmd:alpine task run test --stream-logs
 ```
+
 
 ## AWS Config
 * Ensure task execution role is set up - https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html

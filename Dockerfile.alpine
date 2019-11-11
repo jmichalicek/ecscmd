@@ -1,8 +1,12 @@
-FROM alpine:3.7
+FROM alpine:3.10
 LABEL maintainer="Justin Michalicek <jmichalicek@gmail.com>"
 # TODO: this does not guarantee a correct version...
+# may change this to downloading an already built, versioned binary from elsewhere and potentially
+# move to its own repo similar to what influxdata does
 COPY .build/linux-amd64/ecscmd /bin/ecscmd
-RUN chmod a+x /bin/ecscmd && mkdir /ecscmd
+# putting an empty /root/.aws/* files here with just [default] sections allows a .ecscmd.yaml with a profile specified
+# to still work if all config is just being passed to the docker container via environment variables
+RUN chmod a+x /bin/ecscmd && mkdir /ecscmd && mkdir /root/.aws && touch /root/.aws/config && touch /root/.aws/credentials && echo "[default]" >> /root/.aws/credentials && echo "[default]" >> /root/.aws/config
 WORKDIR /ecscmd
 ENTRYPOINT ["/bin/ecscmd"]
 CMD ["--help"]

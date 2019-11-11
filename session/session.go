@@ -1,8 +1,8 @@
 package session
 
 import (
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	// "fmt"
 )
 
@@ -24,15 +24,4 @@ func NewAwsSession(config map[string]interface{}) (*session.Session, error) {
 		options.Profile = *p
 	}
 	return session.NewSessionWithOptions(options)
-
-	// I think this just uses shared credentials but nothing else in ~/.aws?
-	// sess, err := session.NewSession(&aws.Config{
-	//   Region:      aws.String("us-east-1"),
-	//   Credentials: credentials.NewSharedCredentials("", "test-account"),
-	// })
-
-	// sess, err := session.NewSession(&aws.Config{
-	// 	Region: aws.String("us-east-1")},
-	// )
-
 }
