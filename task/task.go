@@ -1,11 +1,11 @@
-package taskdef
+package task
 
 // might just make this package "tasks" and include running tasks in here, etc.
 
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"text/template"
 	netconfig "github.com/jmichalicek/ecscmd/network_configuration"
+	"text/template"
 	// "fmt"
 	"bytes"
 	"encoding/json"
@@ -129,9 +129,9 @@ func makeEcsVolume(volumeConfig map[string]interface{}) ecs.Volume {
 		// the if is mostly to avoid the call to SetLabels
 		labels := make(map[string]*string, len(l))
 		for k, v := range l {
-				label := v.(string)
-				// label := v // if I could just assert to map[string]string
-				labels[k] = &label
+			label := v.(string)
+			// label := v // if I could just assert to map[string]string
+			labels[k] = &label
 		}
 		v.DockerVolumeConfiguration.SetLabels(labels)
 	}
@@ -149,7 +149,6 @@ func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.
 	// 	fmt.Printf("%s", err)
 	// }
 }
-
 
 // NewRunTaskInput creates an ecs.RunTaskInput and returns it.
 func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
@@ -187,4 +186,62 @@ func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
 	}
 
 	return input, input.Validate()
+}
+
+// NEW DEV
+
+// Facade over ecs.RunTaskInput  which flattens for simplicity
+type Task struct {
+	//awsECS ecsiface.ECSAPI
+
+	// ECS Cluster to run on
+	Cluster string
+	// Name of Task Definition. Full ARN, family or family:revision.
+	TaskDefinitionName string
+	taskDefinition     *TaskDefinition // not sure anything is gained here over using ecs.TaskDefinition
+	Command            []*string
+	Timeout            time.Duration
+	// EC2 or Fargate
+	LaunchType string
+	// Fargate requires subnet ids for awsvpc config
+	Subnets        []*string
+	SecurityGroups []*string
+	// https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html
+	AssignPublicIP string
+}
+
+//func (t *Task) GetTaskDefinition(taskDef *ecs.TaskDefinition, containerName string) (string, string, error) {}
+func (t *Task) Run() {}
+
+func (t *Task) newRunTaskInput() (ecs.RunTaskInput, error) {
+	// TODO: Take a typed config struct rather than this generic options or along with it
+	// and put together the RunTaskInput... but at that point I have basically mirrored
+	// ecs.RunTaskInput and could just use that unless my own struct could abstract it
+	// in some useful manner for register, deregister, run, etc.
+
+	networkConfig, err := netconfig.NewNetworkConfiguration(config)
+	input := ecs.RunTaskInput{
+		Cluster: t.Cluster, Count: 1, TaskDefinition: t.TaskDefinitionName, LaunchType: t.LaunchType,
+	}
+
+	networkConfig, err := netconfig.NewNetworkConfiguration(config)
+
+	input.SetNetworkConfiguration(&networkConfig)
+	if err != nil {
+		return input, err
+	}
+
+	return input, input.Validate()
+}
+
+// Not so sure this is helpful at all
+type TaskDefinition struct {
+	ecs.TaskDefinition
+	// Family                  string
+	// Containers              []*ecs.ContainerDefinition // not sure I like THIS
+	// NetworkMode             string
+	// ExecutionRoleArn        string
+	// RequiresCompatibilities string
+	// TaskRoleArn             string
+	// Volumes                 []*ecs.Volume
 }
