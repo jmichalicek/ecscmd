@@ -99,6 +99,10 @@ var cmdRegisterTaskDef = &cobra.Command{
 		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
 		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
 		cdef, err := taskdef.MakeContainerDefinitions(containerDefBytes)
+		if err != nil {
+			fmt.Println("error parsing json")
+			return err
+		}
 
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
