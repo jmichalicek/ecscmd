@@ -44,8 +44,12 @@ taskdef:
       ContainerName: "nginx"
       Image: "nginx:latest"
       AwsLogsGroup: "/test"
-
+task:
+  <<: *TASK_DEFAULTS
+  task_definition: "testTaskDef"
+  cluster: "testEcsCluster"
 service:
+  # Service and task are very similar inputs since a service runs long running tasks.
   sample:
     profile: my_aws_profile
     name: "testFargateService"

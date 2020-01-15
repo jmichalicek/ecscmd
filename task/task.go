@@ -1,11 +1,11 @@
-package taskdef
+package task
 
 // might just make this package "tasks" and include running tasks in here, etc.
 
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"text/template"
 	netconfig "github.com/jmichalicek/ecscmd/network_configuration"
+	"text/template"
 	// "fmt"
 	"bytes"
 	"encoding/json"
@@ -129,9 +129,9 @@ func makeEcsVolume(volumeConfig map[string]interface{}) ecs.Volume {
 		// the if is mostly to avoid the call to SetLabels
 		labels := make(map[string]*string, len(l))
 		for k, v := range l {
-				label := v.(string)
-				// label := v // if I could just assert to map[string]string
-				labels[k] = &label
+			label := v.(string)
+			// label := v // if I could just assert to map[string]string
+			labels[k] = &label
 		}
 		v.DockerVolumeConfiguration.SetLabels(labels)
 	}
@@ -149,7 +149,6 @@ func RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput, client *ecs.
 	// 	fmt.Printf("%s", err)
 	// }
 }
-
 
 // NewRunTaskInput creates an ecs.RunTaskInput and returns it.
 func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
@@ -171,7 +170,7 @@ func NewRunTaskInput(config map[string]interface{}) (ecs.RunTaskInput, error) {
 	// but if user specifies more specifically on the command line such as to run a specific revision,
 	// then this becomes misleading/unclear - that is where a separate args struct becomes good
 	// probably need a gracefully falling back chain - of arn, family:revision, family somehow specifiable
-	if taskDefinition, ok := config["family"]; ok {
+	if taskDefinition, ok := config["task_definition"]; ok {
 		input.SetTaskDefinition(taskDefinition.(string))
 	}
 
