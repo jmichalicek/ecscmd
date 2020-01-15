@@ -12,3 +12,7 @@ docker-alpine:
 
 push-docker-alpine:
 	docker push jmichalicek/ecscmd:alpine
+
+update-deps:
+	go get -u ./...
+	go mod tidy

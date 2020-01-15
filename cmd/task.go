@@ -22,7 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/jmichalicek/ecscmd/session"
-	"github.com/jmichalicek/ecscmd/taskdef"
+	"github.com/jmichalicek/ecscmd/task"
 	"github.com/spf13/cobra"
 	"strings"
 	"time"
@@ -36,7 +36,7 @@ type runTaskCommandOptions struct {
 	Cluster         string `koanf:"cluster"`
 	Count           int64  `koanf:"count"`
 	Group           string `koanf:"group"`
-	TaskDefinition  string `koanf:"family"`
+	TaskDefinition  string `koanf:"task_definition"`
 	WaitForComplete bool
 	StreamOutput    bool
 	Fargate         bool
@@ -97,16 +97,15 @@ var cmdRegisterTaskDef = &cobra.Command{
 		}
 		// TODO: not certain this is the way to go given that aws-sdk-go doesn't use the json for this
 		// but it's an easy-ish way to make it clear, modifiable, work with all kinds of vars
-		containerDefBytes, err := taskdef.ParseContainerDefTemplate(taskDefConfig)
-		cdef, err := taskdef.MakeContainerDefinitions(containerDefBytes)
+		containerDefBytes, err := task.ParseContainerDefTemplate(taskDefConfig)
+		cdef, err := task.MakeContainerDefinitions(containerDefBytes)
 		if err != nil {
-			fmt.Println("error parsing json")
-			return err
+			return fmt.Errorf("Error parsing task definitions json: %s", err.Error())
 		}
 
 		// ideally could just pass taskDefConfig and get this back with something else wrapping the above stuff
 		// and this.
-		i, err := taskdef.NewTaskDefinitionInput(taskDefConfig, cdef)
+		i, err := task.NewTaskDefinitionInput(taskDefConfig, cdef)
 		if err != nil {
 			return err
 		}
@@ -122,7 +121,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 		if baseConfig.dryRun {
 			fmt.Printf("%v", i)
 		} else {
-			result, err := taskdef.RegisterTaskDefinition(i, client)
+			result, err := task.RegisterTaskDefinition(i, client)
 			if err != nil {
 				return err
 			}
@@ -135,7 +134,7 @@ var cmdRegisterTaskDef = &cobra.Command{
 
 var cmdRunTask = &cobra.Command{
 	// TODO: deal with using either the actual task def name/family/arn OR our local config name
-	Use:   "run taskDefName",
+	Use:   "run taskName",
 	Short: "Run an ECS task. Currently assumes a Fargate launch type.",
 	Long:  `Run an ECS task. Currently assumes a Fargate launch type.`,
 	Args:  cobra.MinimumNArgs(1),
@@ -143,10 +142,11 @@ var cmdRunTask = &cobra.Command{
 		// TODO: Wow, this has gotten messy after starting to add logstream watching... needs cleaned up even more than I feared it would
 		// TODO: really should make the name of the config optional - may want to run a task
 		// which there is no local config for
-		var taskDefName = args[0]
-		var configKey = fmt.Sprintf("taskdef.%s", taskDefName)
+		var taskName = args[0]
+		var configKey = fmt.Sprintf("task.%s", taskName)
 		if !k.Exists(configKey) {
-			return fmt.Errorf("No task definition configuration named %s", taskDefName)
+			// TODO: allow running completely from command line args
+			return fmt.Errorf("No task definition configuration named %s", taskName)
 		}
 		config := k.Cut(configKey).Raw()
 		session, err := session.NewAwsSession(config)
@@ -156,17 +156,28 @@ var cmdRunTask = &cobra.Command{
 
 		// TODO: clunky and gross
 		if runTaskOptions.TaskDefinition != "" {
-			config["family"] = runTaskOptions.TaskDefinition
+			config["task_definition"] = runTaskOptions.TaskDefinition
 		}
 
-		config["launch_type"] = taskdef.FARGATE
+		// Currently assuming/only supporting Fargate. THere can be a significant difference in parameters
+		// and I have only built support for/tested Fargate so far.
+		config["launch_type"] = task.FARGATE
 		// TODO: look at source for how this is implemented to handle both this OR with extra config
 		// both on ecs.New()
 		client := ecs.New(session)
 		// START GET TASK DEF AND LOG CONFIGS
-		// Make sure task def exists
+		/*******
+		Make sure task def exists and get logging info for streaming cloudwatch output
+		DescribeTaskDefinitions is used to get this info. You might expect to get this
+		from DescribeTasks (https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#ECS.DescribeTasks) after the task
+		is created, but that does not seem to be the case. It returns a DescribeTasksOutput, which includes a list of
+		Task (https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#Task) which does not directly have log configuration info
+		but does have a TaskDefinition, which is just the arn, which would then be used to do exactly this DescribeTaskDefinition() call
+		*********/
+
 		// TODO: Put this in a function somewhere or really I think I do need wrapper Task and TaskDef structs maybe
-		taskDefFam := config["family"].(string)
+		// TODO: review https://docs.aws.amazon.com/sdk-for-go/api/service/ecs/#ECS.DescribeTasks for the example for error checking!
+		taskDefFam := config["task_definition"].(string)
 		describeTaskDefInput := &ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: &taskDefFam,
 		}
@@ -184,7 +195,7 @@ var cmdRunTask = &cobra.Command{
 		// END GET TASK DEF AND LOG CONFIGS
 
 		// TODO: look up task def, get log stream info
-		runTaskInput, err := taskdef.NewRunTaskInput(config)
+		runTaskInput, err := task.NewRunTaskInput(config)
 		if err != nil {
 			return err
 		}
@@ -192,7 +203,7 @@ var cmdRunTask = &cobra.Command{
 		// handle the output.
 		// TODO: Make a nice interface to use for these and a single "dostuff()"
 		// function which takes that interface - then could call mything.DryRun()
-		// or MyConfig.Execute() and those could return a standard interface and errors
+		// or mything.Execute() and those could return a standard interface and errors
 		// and then the if err != nil stuff could live
 		// in one place instead of every Run function
 		// Unsure how to abstract stuff like waiting on a waiter, though.
@@ -203,7 +214,7 @@ var cmdRunTask = &cobra.Command{
 		}
 
 		runTaskResponse, err := client.RunTask(&runTaskInput)
-		// result, err := taskdef.RegisterTaskDefinition(i, client)
+		// result, err := task.RegisterTaskDefinition(i, client)
 		if err != nil {
 			return err
 		}
@@ -282,7 +293,7 @@ func init() {
 	// TODO: still gross. I want these processed AFTER reading options from config, anyway.
 	cmdRegisterTaskDef.Flags().StringArrayVar(&registerTaskOptions.TemplateVars, "template-var", []string{}, "Specify a template variable name and value for use in the task definition template. --template-var\"name=value\". May be specified multiple times to set multiple variables.")
 
-	cmdRunTask.Flags().StringVar(&runTaskOptions.TaskDefinition, "task-definition", "", "Task definition arn for the task to run. This could be full arn, family, or family:revision")
+	cmdRunTask.Flags().StringVar(&runTaskOptions.TaskDefinition, "task-definition", "", "Task definition for the task to run. This could be full arn, family, or family:revision")
 	cmdRunTask.Flags().StringVar(&runTaskOptions.Cluster, "cluster", "", "Cluster to run the task on. Defaults to AWS default cluster.")
 	cmdRunTask.Flags().Int64Var(&runTaskOptions.Count, "count", 1, "How many of this task to run.")
 	cmdRunTask.Flags().BoolVar(&runTaskOptions.WaitForComplete, "wait-for-stop", false, "Wait for the task to complete before continuing.")
